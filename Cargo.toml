@@ -1,0 +1,16 @@
+[package]
+name = "modular-apis-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+#clap = "4.5"
+prost = "0.12"
+pbjson = "0.6"
+pbjson-types = "0.6"
+serde = "1.0"
+
+
+[build-dependencies]
+prost-build = "0.12"
+pbjson-build = "0.6"

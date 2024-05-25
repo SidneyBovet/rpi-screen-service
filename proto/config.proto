@@ -1,0 +1,6 @@
+syntax = "proto3";
+package api_config;
+
+message ApiConfig {
+    string telegram_api_code = 1;
+}
