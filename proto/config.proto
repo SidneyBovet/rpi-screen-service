@@ -1,6 +1,24 @@
 syntax = "proto3";
 package api_config;
 
+message GoogleCalendarApi {
+    message Credentials {
+        // TODO: We probably don't need all of these, but rather OAuth token or the URI thing.
+        // If so, try a oneof maybe?
+        string client_id = 1;
+        string client_secret = 2;
+        string redirect_uri = 3;
+        string token = 4;
+        string refresh_token = 5;
+    }
+    message Config {
+        string calendar_id = 1;
+    }
+
+    Credentials credentials = 1;
+    Config config = 2;
+}
+
 message ApiConfig {
-    string telegram_api_code = 1;
+    GoogleCalendarApi gcal = 1;
 }

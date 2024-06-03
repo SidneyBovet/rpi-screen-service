@@ -25,6 +25,7 @@ fn main() {
 
     // TODO:
     // - migrate to actual project
+    //   - (after having learned about tokyo, concurrency, async, etc.)
     //   - add gRPC layer here
     //   - move everything to a new project
     //   - find a way to have led matrix only for the Rpi client
