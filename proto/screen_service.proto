@@ -1,0 +1,49 @@
+syntax = "proto3";
+package screen_service;
+
+import "google/protobuf/timestamp.proto";
+
+service ScreenService {
+    rpc GetScreenContent (ScreenContentRequest) returns (ScreenContentReply);
+}
+
+message ScreenContentRequest {
+}
+
+message ScreenContentReply {
+    Time now = 1;
+    float brightness = 2;
+    repeated KittyDebt kitty_debts = 3;
+    repeated Departure bud_departures = 4;
+    CalendarEvent next_upcoming_event = 5;
+}
+
+// The current time for the server, with minute precision
+// Note: this is not a timestamp to avoid constant changes + timezone issues
+message Time {
+    uint32 hours = 1;
+    uint32 minutes = 2;
+}
+
+// A debt as represented by our KittySplit
+message KittyDebt {
+    string who = 1;
+    float how_much = 2;
+    string whom = 3;
+}
+
+// A departure of a bus line to some destination.
+message Departure {
+    enum Destination {
+        UNKNOWN = 0;
+        RENENS = 1;
+        FLON = 2;
+    }
+    Destination destination = 1;
+    google.protobuf.Timestamp departure_time = 2;
+}
+
+message CalendarEvent {
+    string event_title = 1;
+    google.protobuf.Timestamp event_start = 2;
+}

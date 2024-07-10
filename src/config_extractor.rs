@@ -6,21 +6,35 @@ pub mod api_config {
     include!(concat!(env!("OUT_DIR"), "/api_config.serde.rs"));
 }
 
-pub mod config_extractor {
-    use crate::config_extractor::api_config::ApiConfig;
-    use clap::ArgMatches;
-    use std::{fs::File, io::BufReader, path::PathBuf};
+use crate::config_extractor::api_config::ApiConfig;
+use clap::ArgMatches;
+use std::{fs::File, io::BufReader, path::PathBuf};
+use clap::{Arg, Command};
 
-    pub fn extract_config(matches: &ArgMatches) -> Result<ApiConfig, Box<dyn std::error::Error>> {
-        // Return early if we don't have a path
-        let path: &PathBuf = matches.get_one("path").ok_or("Missing path argument")?;
-        // Open the file from the given path
-        let file = File::open(path)?;
-        // Open the file in a buffered reader
-        let reader = BufReader::new(file);
-        // This needs to known to use the ApiConfig deserializer, hence the explicit type
-        let api_config: ApiConfig = serde_json::from_reader(reader)?;
+pub fn cli() -> Command {
+    Command::new("API tester")
+        .about("Testing API stuff (and args parsing + proto, really)")
+        //.bin_name("api_tester")
+        .arg_required_else_help(true)
+        .arg(
+            //arg!(--"config" "c" <PATH>)
+            Arg::new("path")
+                .short('c')
+                .long("config")
+                .value_parser(clap::value_parser!(std::path::PathBuf))
+                .help("Path to a JSON config file with API codes"),
+        )
+}
 
-        Ok(api_config)
-    }
+pub fn extract_config(matches: &ArgMatches) -> Result<ApiConfig, Box<dyn std::error::Error>> {
+    // Return early if we don't have a path
+    let path: &PathBuf = matches.get_one("path").ok_or("Missing path argument")?;
+    // Open the file from the given path
+    let file = File::open(path)?;
+    // Open the file in a buffered reader
+    let reader = BufReader::new(file);
+    // This needs to known to use the ApiConfig deserializer, hence the explicit type
+    let api_config: ApiConfig = serde_json::from_reader(reader)?;
+
+    Ok(api_config)
 }

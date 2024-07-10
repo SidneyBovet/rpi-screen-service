@@ -27,5 +27,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // This is the proto package name
         .build(&[".api_config"])?;
 
+    // Tonic compilation of service proto
+    tonic_build::compile_protos("proto/screen_service.proto")?;
+
     Ok(())
 }

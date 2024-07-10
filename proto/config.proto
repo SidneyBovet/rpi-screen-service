@@ -19,6 +19,12 @@ message GoogleCalendarApi {
     Config config = 2;
 }
 
+message Server {
+    string address = 1;
+    uint32 port = 2;
+}
+
 message ApiConfig {
-    GoogleCalendarApi gcal = 1;
+    Server server = 1;
+    GoogleCalendarApi gcal = 2;
 }
