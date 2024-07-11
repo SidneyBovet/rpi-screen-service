@@ -10,11 +10,11 @@ required-features = ["server"]
 
 [[bin]] # Bin to run the simple CLI gRPC client
 name = "screen-cli-client"
-path = "src/cli-client.rs"
+path = "src/cli_client.rs"
 
 [[bin]] # Bin to run the actual Raspi client
 name = "screen-rpi-client"
-path = "src/rpi-client.rs"
+path = "src/rpi_client.rs"
 
 [dependencies]
 chrono = {version = "0.4", optional = true}

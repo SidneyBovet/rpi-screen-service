@@ -3,17 +3,31 @@ use crate::screen_service::KittyDebt;
 use reqwest::Client;
 use scraper::{ElementRef, Html, Selector};
 
-pub async fn get_debts(
-    config: &api_config::ApiConfig,
-) -> Result<Vec<KittyDebt>, Box<dyn std::error::Error>> {
-    println!("getting debts");
-    let kitty_url = config.kitty.as_ref().ok_or("No Kitty config")?.url.clone();
-    let client = Client::new(); // TODO: move this outside (member var?) to avoid creating a client at each call
-    println!("client created");
-    let body = client.get(kitty_url).send().await?.text().await?;
-    println!("got body of size {}", body.len());
+#[derive(Debug)]
+pub struct KittyUpdater {
+    client: Client,
+    kitty_url: String,
+}
 
-    extract_debts(&body).map_err(|err| format!("Error parsing Kitty debts: {:?}", err).into())
+impl KittyUpdater {
+    pub fn new(config: &api_config::ApiConfig) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(KittyUpdater {
+            client: Client::new(),
+            kitty_url: config.kitty.as_ref().ok_or("No Kitty config")?.url.clone(),
+        })
+    }
+
+    pub async fn get_debts(&self) -> Result<Vec<KittyDebt>, Box<dyn std::error::Error>> {
+        let body = self
+            .client
+            .get(&self.kitty_url)
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        extract_debts(&body).map_err(|err| format!("Error parsing Kitty debts: {:?}", err).into())
+    }
 }
 
 fn extract_debts(body: &String) -> Result<Vec<KittyDebt>, Box<dyn std::error::Error>> {
