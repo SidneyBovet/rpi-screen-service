@@ -30,7 +30,10 @@ impl ScreenService for MyScreenService {
         // TODO: move this into a periodic update on another thread
         let debts = match kitty_updater::get_debts(&self.config).await {
             Ok(kitty) => kitty, // TODO: here we'd set our shared copy of the content reply (and reset our error bit)
-            Err(_) => vec![], // TODO: and here we set our error bit (then the code will set the reply's bit if any of the bits are set) + some logging
+            Err(e) => {
+                println!("Error while parsing Kitty: {}", e);
+                vec![] // TODO: and here we set our error bit (then the code will set the reply's bit if any of the bits are set) + some logging
+            },
         };
 
         let reply = ScreenContentReply {
@@ -101,15 +104,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 // TODO:
 // - migrate to actual project
-//   - (after having learned about tokyo, concurrency, async, etc.)
-//   - add gRPC layer here
 //   - move everything to a new project
 //   - find a way to have led matrix only for the Rpi client
 //   - make another client that just prints the proto on hash change
+// - add proper logging
 // - play with google_calendar crate to read stuff
-// - implement kitty parser
-//   - Kitty URL: https://www.kittysplit.com/number-three/NjCvUvs50prTrXsKaY352sJ9amQppQbm-2?view_as_creator=true
-//   - See kitty_manager::update_debts in \\unraid.home\backups\Programming\led-panel\led-panel\display_content_managers.cpp
 // - Query stop info, see https://opentransportdata.swiss/en/cookbook/open-journey-planner-ojp/
 //   - Timonet ID: 8588845
 //   - Get enough results that we have next to Flon, and next to Renens (could be 32 or 54)

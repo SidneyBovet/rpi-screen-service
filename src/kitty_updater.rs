@@ -1,41 +1,79 @@
 use crate::config_extractor::api_config;
-
 use crate::screen_service::KittyDebt;
 use reqwest::Client;
+use scraper::{ElementRef, Html, Selector};
 
-pub async fn get_debts(config: &api_config::ApiConfig) -> Result<Vec<KittyDebt>, Box<dyn std::error::Error>> {
-    let mut debts = vec![];
-    let kitty_url = config.kitty.as_ref().ok_or("no Kitty config")?.url.clone();
+pub async fn get_debts(
+    config: &api_config::ApiConfig,
+) -> Result<Vec<KittyDebt>, Box<dyn std::error::Error>> {
+    println!("getting debts");
+    let kitty_url = config.kitty.as_ref().ok_or("No Kitty config")?.url.clone();
     let client = Client::new(); // TODO: move this outside (member var?) to avoid creating a client at each call
+    println!("client created");
     let body = client.get(kitty_url).send().await?.text().await?;
-    debts.push(KittyDebt {
-        who: "".into(),
-        how_much: 0.0,
-        whom: "".into(),
-    });
+    println!("got body of size {}", body.len());
+
+    extract_debts(&body).map_err(|err| format!("Error parsing Kitty debts: {:?}", err).into())
+}
+
+fn extract_debts(body: &String) -> Result<Vec<KittyDebt>, Box<dyn std::error::Error>> {
+    // Parse the body into a tree structure, returning on parsing errors
+    let parsed_body = Html::parse_document(&body);
+
+    // Select elements like '<div class="transaction-text">'
+    let transaction_selector = Selector::parse(r#"div[class="transaction-text"]"#)?;
+    // Try to extract a proper debt from each of them, discarding failures (but logging them)
+    let debts: Vec<KittyDebt> = parsed_body
+        .select(&transaction_selector)
+        .filter_map(|t| {
+            extract_debt(&t)
+                // TODO: log this better than a println
+                .inspect_err(|e| println!("Error extracting a debt: {}", e))
+                .ok()
+        })
+        .collect();
+
+    // Error out if we didn't find a single debt (there should really always be two)
+    if debts.is_empty() {
+        return Err(format!(
+            "No debts found on page (body size: {}, parse errors: [{}])",
+            body.len(),
+            parsed_body.errors.join(", ")
+        )
+        .into());
+    }
+
     Ok(debts)
 }
 
-fn extract_debt(body: &String) -> Option<KittyDebt> {
-    let who_start = body.find("<div class=\"transaction-text\">")?;
-    println!("who_start = {who_start}");
+fn extract_debt(element: &ElementRef) -> Result<KittyDebt, Box<dyn std::error::Error>> {
+    let all_texts = element.text().collect::<Vec<_>>();
 
-    let who_end = body[who_start..].find("<span class=\"currency\">")?;
-    let how_much_start = who_end + 4;
-    let how_much_end = body[how_much_start..].find("</span>")?;
-    let whom_start = how_much_end + 6;
-    let whom_end = body[who_start..].find("</div>")?;
+    let who_text = all_texts
+        .iter()
+        .find(|t| t.contains(" gives "))
+        .ok_or("no text node contained 'gives'")?
+        .replace(" gives ", "");
+    let who = who_text.trim().to_string();
+    let how_much = all_texts
+        .iter()
+        .find_map(|t| t.trim().parse::<f32>().ok())
+        .ok_or("no text field was parseable into a float")?;
+    let whom_text = all_texts
+        .iter()
+        .find(|t| t.contains(" to "))
+        .ok_or("no text node contained 'to'")?
+        .replace(" to ", "");
+    let whom = whom_text.trim().to_string();
 
-    let who = &body[who_start..who_end];
-    let how_much = &body[how_much_start..how_much_end].parse::<f32>().ok()?;
-    let whom = &body[whom_start..whom_end];
-
-    let debt = KittyDebt {
-        who: who.into(),
-        how_much: *how_much,
-        whom: whom.into(),
-    };
-    Some(debt)
+    if who.is_empty() || whom.is_empty() {
+        return Err(format!("either who ('{}') or whom ('{}') was empty", who, whom).into());
+    }
+    Ok(KittyDebt {
+        who,
+        how_much,
+        whom,
+    })
 }
 
 #[cfg(test)]
@@ -43,8 +81,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn finds_first_debt() {
+    fn finds_one_debt() {
         let body = r#"
+<body>
+<ul class="transactions horizontal-divider">
+    <li class="transaction ks-data-row">
+        <div class="transaction-icon kitty-icon-column">
+            <i class="fa-icon fas fa-money-bill-alt text-success " aria-hidden="true"></i>
+        </div>
+        <div class="transaction-text">
+            Sid gives <span class="currency"><span class="currency-symbol">CHF</span>72.50</span> to Moses
+        </div>
+        <div class="transaction-action">
+        </div>
+    </li>
+</ul>
+</body>
+"#.into();
+        let expected = KittyDebt {
+            who: "Sid".into(),
+            how_much: 72.5,
+            whom: "Moses".into(),
+        };
+        assert_eq!(extract_debts(&body).unwrap(), vec![expected]);
+    }
+
+    #[test]
+    fn finds_two_debts() {
+        let body = r#"
+<body>
 <ul class="transactions horizontal-divider">
     <li class="transaction ks-data-row">
         <div class="transaction-icon kitty-icon-column">
@@ -67,12 +132,59 @@ mod tests {
         </div>
     </li>
 </ul>
+</body>
 "#.into();
-        let expected = KittyDebt {
+        let expected_one = KittyDebt {
             who: "Sid".into(),
             how_much: 72.5,
-            whom: "Moses".into()
+            whom: "Moses".into(),
         };
-        assert_eq!(extract_debt(&body), Some(expected));
+        let expected_two = KittyDebt {
+            who: "Bini".into(),
+            how_much: 137.94,
+            whom: "Moses".into(),
+        };
+        assert_eq!(
+            extract_debts(&body).unwrap(),
+            vec![expected_one, expected_two]
+        );
+    }
+
+    #[test]
+    fn doesnt_panic_on_garbled_input() {
+        let body = "\\<".into();
+        assert!(extract_debts(&body).is_err());
+    }
+
+    #[test]
+    fn doesnt_panic_on_empty_page() {
+        let body = "".into();
+        assert!(extract_debts(&body).is_err());
+    }
+
+    #[test]
+    fn doesnt_panic_on_no_debts() {
+        let body = r#"
+<body>
+<ul class="transactions horizontal-divider">
+    <li class="transaction ks-data-row">
+        <div class="transaction-icon kitty-icon-column">
+            <i class="fa-icon fas fa-money-bill-alt text-success " aria-hidden="true"></i>
+        </div>
+        <div class="transaction-action">
+        </div>
+    </li>
+    <li class="transaction ks-data-row">
+        <div class="transaction-icon kitty-icon-column">
+            <i class="fa-icon fas fa-certificate text-muted " aria-hidden="true"></i>
+        </div>
+        <div class="transaction-action">
+        </div>
+    </li>
+</ul>
+</body>
+"#
+        .into();
+        assert!(extract_debts(&body).is_err());
     }
 }
