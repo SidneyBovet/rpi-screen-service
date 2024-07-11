@@ -1,0 +1,39 @@
+# Scan this file for changes every 30 seconds
+refresh_rate: 30 seconds
+
+appenders:
+  # An appender named "stdout" that writes to stdout
+  stdout:
+    kind: console
+    # The output to write to. One of `stdout` or `stderr`. Defaults to `stdout`.
+    target: stdout
+    # The encoder to use to format output. Defaults to `kind: pattern`.
+    encoder:
+      kind: pattern
+
+  # An appender named "file_sink" that writes to a file with a custom pattern encoder
+  file_sink:
+    kind: rolling_file
+    path: "log/screen_service.log"
+    append: true
+    encoder:
+      kind: pattern
+    # The policy which handles rotation of the log file. Required.
+    policy:
+      # Identifies which policy is to be used. If no kind is specified, it will
+      # default to "compound".
+      kind: compound
+      # The remainder of the configuration is passed along to the policy's
+      # deserializer, and will vary based on the kind of policy.
+      trigger:
+        kind: size
+        limit: 10 mb
+      roller:
+        kind: delete
+
+# Set the default logging level to "warn" and attach the "stdout" appender to the root
+root:
+  level: info
+  appenders:
+    - stdout
+    - file_sink

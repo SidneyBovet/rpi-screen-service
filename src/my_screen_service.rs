@@ -3,6 +3,7 @@ use crate::kitty_updater::KittyUpdater;
 use crate::screen_service::screen_service_server::ScreenService;
 use crate::screen_service::{ScreenContentReply, ScreenContentRequest, Time};
 use chrono::Timelike;
+use log::{info, warn};
 use tonic::{Request, Response, Status};
 
 #[derive(Debug)]
@@ -26,18 +27,22 @@ impl ScreenService for MyScreenService {
         request: Request<ScreenContentRequest>, // Accept request of type ScreenContentRequest
     ) -> Result<Response<ScreenContentReply>, Status> {
         // Return an instance of type ScreenContentReply
-        println!("Got a request: {:?}", request);
+        info!("Got a request: {:?}", request);
 
         let now = chrono::offset::Local::now();
 
+        /*
         // TODO: move this into a periodic update on another thread
         let debts = match self.kitty_updater.get_debts().await {
             Ok(kitty) => kitty, // TODO: here we'd set our shared copy of the content reply (and reset our error bit)
             Err(e) => {
-                println!("Error while parsing Kitty: {}", e);
+                warn!("Error while parsing Kitty: {}", e);
                 vec![] // TODO: and here we set our error bit (then the code will set the reply's bit if any of the bits are set) + some logging
             }
         };
+        */
+        warn!("Skipped kitty update");
+        let debts = vec![];
 
         let reply = ScreenContentReply {
             now: Some(Time {

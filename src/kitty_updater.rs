@@ -2,6 +2,7 @@ use crate::config_extractor::api_config;
 use crate::screen_service::KittyDebt;
 use reqwest::Client;
 use scraper::{ElementRef, Html, Selector};
+use log::warn;
 
 #[derive(Debug)]
 pub struct KittyUpdater {
@@ -41,8 +42,7 @@ fn extract_debts(body: &String) -> Result<Vec<KittyDebt>, Box<dyn std::error::Er
         .select(&transaction_selector)
         .filter_map(|t| {
             extract_debt(&t)
-                // TODO: log this better than a println
-                .inspect_err(|e| println!("Error extracting a debt: {}", e))
+                .inspect_err(|e| warn!("Error extracting a debt: {}", e))
                 .ok()
         })
         .collect();
