@@ -38,14 +38,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
-// TODO:
-// - migrate to actual project
-//   - move everything to a new project
-//   - find a way to have led matrix only for the Rpi client
-//   - make another client that just prints the proto on hash change
-// - play with google_calendar crate to read stuff
-// - Query stop info, see https://opentransportdata.swiss/en/cookbook/open-journey-planner-ojp/
-//   - Timonet ID: 8588845
-//   - Get enough results that we have next to Flon, and next to Renens (could be 32 or 54)
-//   - Check out how to POST, and parse XML
