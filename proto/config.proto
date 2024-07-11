@@ -1,6 +1,11 @@
 syntax = "proto3";
 package api_config;
 
+message Server {
+    string address = 1;
+    uint32 port = 2;
+}
+
 message GoogleCalendarApi {
     message Credentials {
         // TODO: We probably don't need all of these, but rather OAuth token or the URI thing.
@@ -19,12 +24,12 @@ message GoogleCalendarApi {
     Config config = 2;
 }
 
-message Server {
-    string address = 1;
-    uint32 port = 2;
+message KittyConfig {
+    string url = 1;
 }
 
 message ApiConfig {
     Server server = 1;
     GoogleCalendarApi gcal = 2;
+    KittyConfig kitty = 3;
 }

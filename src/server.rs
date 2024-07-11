@@ -1,6 +1,8 @@
 mod config_extractor;
+mod kitty_updater;
 
 use chrono::Timelike;
+use config_extractor::api_config::ApiConfig;
 use screen_service::screen_service_server::{ScreenService, ScreenServiceServer};
 use screen_service::{ScreenContentReply, ScreenContentRequest};
 use tonic::{transport::Server, Request, Response, Status};
@@ -10,7 +12,9 @@ pub mod screen_service {
 }
 
 #[derive(Debug, Default)]
-pub struct MyScreenService {}
+pub struct MyScreenService {
+    config: config_extractor::api_config::ApiConfig,
+}
 
 #[tonic::async_trait]
 impl ScreenService for MyScreenService {
@@ -23,18 +27,51 @@ impl ScreenService for MyScreenService {
 
         let now = chrono::offset::Local::now();
 
+        // TODO: move this into a periodic update on another thread
+        let debts = match kitty_updater::get_debts(&self.config).await {
+            Ok(kitty) => kitty, // TODO: here we'd set our shared copy of the content reply (and reset our error bit)
+            Err(_) => vec![], // TODO: and here we set our error bit (then the code will set the reply's bit if any of the bits are set) + some logging
+        };
+
         let reply = ScreenContentReply {
             now: Some(screen_service::Time {
                 hours: now.hour(),
                 minutes: now.minute(),
             }),
             brightness: 1.0,
-            kitty_debts: vec![],
+            kitty_debts: debts,
             bud_departures: vec![],
             next_upcoming_event: None,
+            error: false,
         };
 
         Ok(Response::new(reply))
+    }
+}
+
+fn maybe_dummy_client(start_dummy: bool, api_config: &ApiConfig) {
+    if start_dummy {
+        let config_copy = api_config.clone();
+        tokio::spawn(async move {
+            println!("Starting dummy client...");
+            // No need to sleep here since we'll get CPU time only after the server started.
+            let server_config = config_copy.server.expect("No server config found");
+            let address: tonic::transport::Endpoint =
+                format!("http://{}:{}", server_config.address, server_config.port)
+                    .parse()
+                    .expect("couldn't parse server config into an address");
+            let mut client =
+                screen_service::screen_service_client::ScreenServiceClient::connect(address)
+                    .await
+                    .expect("couldn't start dummy client");
+            let request = tonic::Request::new(ScreenContentRequest {});
+            let response = client
+                .get_screen_content(request)
+                .await
+                .expect("couldn't get server reply");
+
+            println!("\nResponse to dummy client: {:?}", response);
+        });
     }
 }
 
@@ -45,10 +82,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Config loaded: {:#?}", config);
 
-    let server_config = config.server.expect("No server config found");
+    maybe_dummy_client(matches.get_flag("dummy_client"), &config);
+
+    let server_config = config.server.as_ref().expect("No server config found");
     let address = format!("{}:{}", server_config.address, server_config.port).parse()?;
 
-    let screen_service = MyScreenService::default();
+    let screen_service = MyScreenService {
+        config: config.clone(),
+    };
 
     Server::builder()
         .add_service(ScreenServiceServer::new(screen_service))

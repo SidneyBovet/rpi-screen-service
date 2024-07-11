@@ -8,8 +8,8 @@ pub mod api_config {
 
 use crate::config_extractor::api_config::ApiConfig;
 use clap::ArgMatches;
-use std::{fs::File, io::BufReader, path::PathBuf};
 use clap::{Arg, Command};
+use std::{fs::File, io::BufReader, path::PathBuf};
 
 pub fn cli() -> Command {
     Command::new("API tester")
@@ -23,6 +23,12 @@ pub fn cli() -> Command {
                 .long("config")
                 .value_parser(clap::value_parser!(std::path::PathBuf))
                 .help("Path to a JSON config file with API codes"),
+        )
+        .arg(
+            Arg::new("dummy_client")
+                .long("dummy")
+                .action(clap::ArgAction::SetTrue)
+                .help("Also start a client making a dummy call, then exit"),
         )
 }
 

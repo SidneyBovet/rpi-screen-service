@@ -16,6 +16,7 @@ message ScreenContentReply {
     repeated KittyDebt kitty_debts = 3;
     repeated Departure bud_departures = 4;
     CalendarEvent next_upcoming_event = 5;
+    bool error = 6;
 }
 
 // The current time for the server, with minute precision
