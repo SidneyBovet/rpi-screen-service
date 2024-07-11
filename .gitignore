@@ -2,3 +2,6 @@
 
 # These will contain API keys
 config.json
+
+# Log files from debug runs
+/log
