@@ -1053,29 +1053,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "modular-apis-test"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "clap",
- "log",
- "log4rs",
- "pbjson",
- "pbjson-build",
- "pbjson-types",
- "prost",
- "prost-build",
- "prost-types",
- "reqwest",
- "scraper",
- "serde",
- "serde_json",
- "tokio",
- "tonic",
- "tonic-build",
-]
-
-[[package]]
 name = "multimap"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1602,6 +1579,29 @@ dependencies = [
  "spin",
  "untrusted",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "rpi-screen-service"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "log",
+ "log4rs",
+ "pbjson",
+ "pbjson-build",
+ "pbjson-types",
+ "prost",
+ "prost-build",
+ "prost-types",
+ "reqwest",
+ "scraper",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tonic",
+ "tonic-build",
 ]
 
 [[package]]
