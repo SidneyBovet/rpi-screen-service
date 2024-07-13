@@ -27,10 +27,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     maybe_dummy_client(matches.get_flag("dummy_client"), &config);
 
+    // Create the service, and tell it to start the content updates
+    let screen_service = my_screen_service::MyScreenService::new(&config);
+    screen_service.start_backgound_updates();
+
+    // Start the actual serving
     let server_config = config.server.as_ref().expect("No server config found");
     let address = format!("{}:{}", server_config.address, server_config.port).parse()?;
-
-    let screen_service = my_screen_service::MyScreenService::new(&config);
     Server::builder()
         .add_service(ScreenServiceServer::new(screen_service))
         .serve(address)

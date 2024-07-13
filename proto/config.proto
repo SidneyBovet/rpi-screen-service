@@ -1,6 +1,8 @@
 syntax = "proto3";
 package api_config;
 
+import "google/protobuf/duration.proto";
+
 message Server {
     string address = 1;
     uint32 port = 2;
@@ -17,7 +19,8 @@ message GoogleCalendarApi {
         string refresh_token = 5;
     }
     message Config {
-        string calendar_id = 1;
+        google.protobuf.Duration update_period = 1;
+        string calendar_id = 2;
     }
 
     Credentials credentials = 1;
@@ -25,7 +28,8 @@ message GoogleCalendarApi {
 }
 
 message KittyConfig {
-    string url = 1;
+    google.protobuf.Duration update_period = 1;
+    string url = 2;
 }
 
 message ApiConfig {

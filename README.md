@@ -6,6 +6,7 @@ Client and server apps to run my LED panel from a Raspberry Pi, with another, mo
 
 - [x] add Kitty parser
 - [x] implement proper logging
+- [ ] move to prost 0.13, which has nicer getter and setter functions
 - [ ] find a way to have led matrix only for the Rpi client
 - [x] make another client that just prints the proto
 - [ ] have the cli client query hash and do the full request on changes

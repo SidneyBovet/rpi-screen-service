@@ -14,7 +14,7 @@ message ScreenContentReply {
     Time now = 1;
     float brightness = 2;
     repeated KittyDebt kitty_debts = 3;
-    repeated Departure bud_departures = 4;
+    repeated Departure bus_departures = 4;
     CalendarEvent next_upcoming_event = 5;
     bool error = 6;
 }
