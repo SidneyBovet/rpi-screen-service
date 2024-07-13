@@ -4,9 +4,11 @@ use std::sync::{Arc, Mutex};
 use crate::config_extractor::api_config::ApiConfig;
 use crate::kitty_updater::KittyUpdater;
 use crate::screen_service::screen_service_server::ScreenService;
-use crate::screen_service::{ScreenContentReply, ScreenContentRequest, Time};
+use crate::screen_service::{
+    ScreenContentReply, ScreenContentRequest, ScreenHashReply, ScreenHashRequest, Time,
+};
 use chrono::Timelike;
-use log::{info, warn};
+use log::{error, info};
 use prost::Message;
 use tonic::{Request, Response, Status};
 
@@ -31,7 +33,7 @@ impl DataUpdater for TimeUpdater {
                     minutes: now.minute(),
                 });
             }
-            Err(e) => warn!("Poisoned lock when writing time: {}", e),
+            Err(e) => error!("Poisoned lock when writing time: {}", e),
         }
     }
 
@@ -55,7 +57,7 @@ impl DataUpdater for DummyKittyUpdater {
         };
         match screen_content.lock() {
             Ok(mut content) => content.kitty_debts = vec![dummy_kitty_debt],
-            Err(e) => warn!("Poisoned lock when writing Kitty: {}", e),
+            Err(e) => error!("Poisoned lock when writing Kitty: {}", e),
         }
     }
 
@@ -86,7 +88,6 @@ impl MyScreenService {
     fn start_clock_updates(&self) {
         let container = Arc::clone(&self.screen_content_container);
         tokio::spawn(async move {
-            //let container = containter.clone();
             let time_updater = TimeUpdater {};
             let mut interval = tokio::time::interval(time_updater.get_period());
             loop {
@@ -99,7 +100,6 @@ impl MyScreenService {
     fn start_dummy_kitty_updates(&self) {
         let container = Arc::clone(&self.screen_content_container);
         tokio::spawn(async move {
-            //let container = containter.clone();
             let kitty_updater = DummyKittyUpdater {};
             let mut interval = tokio::time::interval(kitty_updater.get_period());
             loop {
@@ -126,6 +126,7 @@ impl MyScreenService {
                 .expect("invalid kitty update period"),
         );
         tokio::spawn(async move {
+            // TODO: allow kitty to run in dummy mode with the same behaviour as the dummy updater above
             let kitty_updater =
                 KittyUpdater::new(&self.config).expect("Error creating the Kitty updater");
             // TODO: create interval with kitty's new get_preiod
@@ -161,18 +162,32 @@ impl ScreenService for MyScreenService {
         _request: Request<ScreenContentRequest>,
     ) -> Result<Response<ScreenContentReply>, Status> {
         info!("Serving /GetScreenContent");
-
         // Try to lock and clone our screen content to return it
         let reply: ScreenContentReply = match self.screen_content_container.lock() {
             Ok(content) => content.clone(),
             Err(e) => {
-                warn!("Poisoned lock when reading content for serving: {}", e);
+                error!("Poisoned lock when reading content for serving: {}", e);
                 let mut reply = ScreenContentReply::default();
                 reply.error = true;
                 reply
             }
         };
 
+        Ok(Response::new(reply))
+    }
+
+    async fn get_screen_hash(
+        &self,
+        _request: Request<ScreenHashRequest>,
+    ) -> Result<Response<ScreenHashReply>, Status> {
+        info!("Serving /GetScreenHash");
+        let reply = match self.get_hash() {
+            Ok(hash) => ScreenHashReply { hash },
+            Err(e) => {
+                error!("Error computing hash: {:#?}", e);
+                ScreenHashReply { hash: 0 }
+            }
+        };
         Ok(Response::new(reply))
     }
 }

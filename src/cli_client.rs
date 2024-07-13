@@ -2,7 +2,7 @@ mod config_extractor;
 mod dummy_client;
 
 use crate::config_extractor::{cli, extract_config};
-use crate::dummy_client::maybe_dummy_client;
+use crate::dummy_client::{start, ClientMode};
 use log::info;
 use log::LevelFilter;
 use log4rs::append::console::ConsoleAppender;
@@ -25,6 +25,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let matches = cli().get_matches();
     let api_config = extract_config(&matches).expect("Error reading config");
 
-    maybe_dummy_client(true, &api_config).await?;
+    let mode: ClientMode;
+    if matches.get_flag("dummy_client") {
+        mode = ClientMode::OneShot;
+    } else {
+        mode = ClientMode::HashQuery;
+    }
+
+    start(mode, &api_config).await?;
     Ok(())
 }

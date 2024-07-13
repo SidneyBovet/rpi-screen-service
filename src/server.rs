@@ -4,7 +4,6 @@ mod kitty_updater;
 mod dummy_client;
 
 use screen_service::screen_service_server::ScreenServiceServer;
-use crate::dummy_client::maybe_dummy_client;
 use tonic::transport::Server;
 use log::info;
 
@@ -25,7 +24,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = config_extractor::extract_config(&matches).expect("Error reading config");
     info!("Config loaded: {:#?}", config);
 
-    maybe_dummy_client(matches.get_flag("dummy_client"), &config);
+    // Start a one-shot dummy client if we got the cli flag
+    if matches.get_flag("dummy_client") {
+        crate::dummy_client::start(crate::dummy_client::ClientMode::OneShot, &config);
+    }
 
     // Create the service, and tell it to start the content updates
     let screen_service = my_screen_service::MyScreenService::new(&config);

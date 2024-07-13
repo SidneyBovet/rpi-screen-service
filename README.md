@@ -9,7 +9,7 @@ Client and server apps to run my LED panel from a Raspberry Pi, with another, mo
 - [ ] move to prost 0.13, which has nicer getter and setter functions
 - [ ] find a way to have led matrix only for the Rpi client
 - [x] make another client that just prints the proto
-- [ ] have the cli client query hash and do the full request on changes
+- [x] have the cli client query hash and do the full request on changes
 - [ ] play with `google_calendar` crate to read stuff from gCal
 - [ ] Query stop info from [Open Transport Data](https://opentransportdata.swiss/en/cookbook/open-journey-planner-ojp/) (Timonet ID: 8588845)
 - [ ] Get enough results that we have next to Flon, and next to Renens (could be 32 or 54)

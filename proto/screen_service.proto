@@ -4,7 +4,15 @@ package screen_service;
 import "google/protobuf/timestamp.proto";
 
 service ScreenService {
+    rpc GetScreenHash (ScreenHashRequest) returns (ScreenHashReply);
     rpc GetScreenContent (ScreenContentRequest) returns (ScreenContentReply);
+}
+
+message ScreenHashRequest {
+}
+
+message ScreenHashReply {
+    uint64 hash = 1;
 }
 
 message ScreenContentRequest {
