@@ -59,7 +59,9 @@ fn start_hash_queries(api_config: &ApiConfig) -> JoinHandle<()> {
             let new_hash = make_hash_request(&mut client).await;
             if new_hash != hash {
                 hash = new_hash;
-                make_full_request(&mut client).await;
+                info!("Content changed, sending /GetScreenContent");
+                let content = make_full_request(&mut client).await;
+                info!("{:#?}", content);
             }
         }
     })

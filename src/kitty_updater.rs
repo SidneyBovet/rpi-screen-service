@@ -1,20 +1,90 @@
-use crate::config_extractor::api_config;
-use crate::screen_service::KittyDebt;
+use crate::screen_service::{KittyDebt, ScreenContentReply};
+use crate::{config_extractor::api_config, data_updater::DataUpdater};
+use log::{error, info, warn};
 use reqwest::Client;
 use scraper::{ElementRef, Html, Selector};
-use log::warn;
+use std::sync::{Arc, Mutex};
+use tokio::time::Duration;
+
+#[derive(Debug)]
+// We switch from one to the other for manual testing, but it's actually fine to keep both.
+#[allow(dead_code)]
+pub enum KittyUpdateMode {
+    Dummy,
+    Real,
+}
 
 #[derive(Debug)]
 pub struct KittyUpdater {
+    update_mode: KittyUpdateMode,
     client: Client,
     kitty_url: String,
+    kitty_period: Duration,
+}
+
+#[tonic::async_trait]
+impl DataUpdater for KittyUpdater {
+    fn get_period(&self) -> Duration {
+        match self.update_mode {
+            KittyUpdateMode::Dummy => Duration::from_secs(19),
+            KittyUpdateMode::Real => self.kitty_period,
+        }
+    }
+
+    async fn update(&self, screen_content: &Arc<Mutex<ScreenContentReply>>) {
+        info!("Updating {:?} Kitty", self.update_mode);
+        let debts;
+        match self.update_mode {
+            KittyUpdateMode::Dummy => {
+                let now = chrono::offset::Local::now();
+                let now_seconds =
+                    // These have no rigth to fail, since 'sec' is between 0 and 59
+                    f32::try_from(u16::try_from(chrono::Timelike::second(&now)).unwrap()).unwrap();
+                debts = vec![KittyDebt {
+                    who: "foo".into(),
+                    how_much: now_seconds,
+                    whom: "bar".into(),
+                }]
+            }
+            KittyUpdateMode::Real => {
+                debts = match self.get_debts().await {
+                    Ok(d) => d,
+                    Err(e) => {
+                        error!("Error getting Kitty debts: {}", e);
+                        vec![]
+                    }
+                }
+            }
+        };
+        match screen_content.lock() {
+            Ok(mut content) => {
+                content.kitty_debts = debts;
+            }
+            Err(e) => error!("Poisoned lock when writing debts: {}", e),
+        };
+    }
 }
 
 impl KittyUpdater {
-    pub fn new(config: &api_config::ApiConfig) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(
+        update_mode: KittyUpdateMode,
+        config: &api_config::ApiConfig,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let kitty_config = config.kitty.as_ref().ok_or("No kitty config")?;
+        let kitty_url = kitty_config.url.clone();
+        let kitty_period = tokio::time::Duration::from_secs(
+            kitty_config
+                .update_period
+                .as_ref()
+                .ok_or("no kitty update period")?
+                .seconds
+                .try_into()?,
+        );
         Ok(KittyUpdater {
+            update_mode,
             client: Client::new(),
-            kitty_url: config.kitty.as_ref().ok_or("No Kitty config")?.url.clone(),
+            kitty_url,
+            kitty_period,
         })
     }
 
@@ -42,7 +112,12 @@ fn extract_debts(body: &String) -> Result<Vec<KittyDebt>, Box<dyn std::error::Er
         .select(&transaction_selector)
         .filter_map(|t| {
             extract_debt(&t)
-                .inspect_err(|e| warn!("Error extracting a debt: {}", e))
+                .inspect_err(|e| {
+                    warn!(
+                        "Error extracting a debt from a 'transaction-text' div: {}",
+                        e
+                    )
+                })
                 .ok()
         })
         .collect();

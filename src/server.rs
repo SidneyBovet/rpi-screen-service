@@ -2,6 +2,7 @@ mod config_extractor;
 mod my_screen_service;
 mod kitty_updater;
 mod dummy_client;
+mod data_updater;
 
 use screen_service::screen_service_server::ScreenServiceServer;
 use tonic::transport::Server;
