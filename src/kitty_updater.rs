@@ -88,7 +88,7 @@ impl KittyUpdater {
         })
     }
 
-    pub async fn get_debts(&self) -> Result<Vec<KittyDebt>, Box<dyn std::error::Error>> {
+    async fn get_debts(&self) -> Result<Vec<KittyDebt>, Box<dyn std::error::Error>> {
         let body = self
             .client
             .get(&self.kitty_url)

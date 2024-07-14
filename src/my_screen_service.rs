@@ -9,7 +9,7 @@ use crate::screen_service::{
     ScreenContentReply, ScreenContentRequest, ScreenHashReply, ScreenHashRequest, Time,
 };
 use chrono::Timelike;
-use log::{error, info};
+use log::{error, debug};
 use prost::Message;
 use tonic::{Request, Response, Status};
 
@@ -77,7 +77,7 @@ impl ScreenService for MyScreenService {
         &self,
         _request: Request<ScreenContentRequest>,
     ) -> Result<Response<ScreenContentReply>, Status> {
-        info!("Serving /GetScreenContent");
+        debug!("Serving /GetScreenContent");
         // Try to lock and clone our screen content to return it
         let reply: ScreenContentReply = match self.screen_content_container.lock() {
             Ok(content) => content.clone(),
@@ -96,7 +96,7 @@ impl ScreenService for MyScreenService {
         &self,
         _request: Request<ScreenHashRequest>,
     ) -> Result<Response<ScreenHashReply>, Status> {
-        info!("Serving /GetScreenHash");
+        debug!("Serving /GetScreenHash");
         let reply = match MyScreenService::get_hash(&self.screen_content_container) {
             Ok(hash) => ScreenHashReply { hash },
             Err(e) => {
