@@ -9,22 +9,8 @@ message Server {
 }
 
 message GoogleCalendarApi {
-    message Credentials {
-        // TODO: We probably don't need all of these, but rather OAuth token or the URI thing.
-        // If so, try a oneof maybe?
-        string client_id = 1;
-        string client_secret = 2;
-        string redirect_uri = 3;
-        string token = 4;
-        string refresh_token = 5;
-    }
-    message Config {
-        google.protobuf.Duration update_period = 1;
-        string calendar_id = 2;
-    }
-
-    Credentials credentials = 1;
-    Config config = 2;
+    google.protobuf.Duration update_period = 1;
+    string ics_url = 2;
 }
 
 message KittyConfig {

@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::config_extractor::api_config::ApiConfig;
 use crate::data_updater::DataUpdater;
+use crate::gcal_updater::GcalUpdater;
 use crate::kitty_updater::KittyUpdater;
 use crate::screen_service::screen_service_server::ScreenService;
 use crate::screen_service::{
@@ -30,6 +31,7 @@ impl MyScreenService {
     pub fn start_backgound_updates(&self) {
         // Start the Kitty updater in dummy mode, to avoid spamming the server if we got something wrong
         self.start_kitty_updates(crate::kitty_updater::KittyUpdateMode::Dummy);
+        self.start_gcal_updates(crate::gcal_updater::GcalUpdateMode::Real);
     }
 
     fn start_kitty_updates(&self, update_mode: crate::kitty_updater::KittyUpdateMode) {
@@ -42,6 +44,20 @@ impl MyScreenService {
             loop {
                 interval.tick().await;
                 kitty_updater.update(&container).await;
+            }
+        });
+    }
+
+    fn start_gcal_updates(&self, update_mode: crate::gcal_updater::GcalUpdateMode) {
+        let config_copy = self.config.clone();
+        let container = Arc::clone(&self.screen_content_container);
+        tokio::spawn(async move {
+            let gcal_updater = GcalUpdater::new(update_mode, &config_copy)
+                .expect("Error creating the gcal updater");
+            let mut interval = tokio::time::interval(gcal_updater.get_period());
+            loop {
+                interval.tick().await;
+                gcal_updater.update(&container).await;
             }
         });
     }

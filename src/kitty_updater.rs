@@ -72,7 +72,7 @@ impl KittyUpdater {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let kitty_config = config.kitty.as_ref().ok_or("No kitty config")?;
         let kitty_url = kitty_config.url.clone();
-        let kitty_period = tokio::time::Duration::from_secs(
+        let kitty_period = Duration::from_secs(
             kitty_config
                 .update_period
                 .as_ref()
