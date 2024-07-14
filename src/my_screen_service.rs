@@ -141,11 +141,11 @@ impl MyScreenService {
     // if fast enough we can simply update the time here and get rid of the time updater
     // if not we need to compute the hash after each overwrite, store it
     //   and we need to figure out a way to have decent time precision
-    fn get_hash(&self) -> Result<u64, Box<dyn std::error::Error + '_>> {
+    fn get_hash(content: &Arc<Mutex<ScreenContentReply>>) -> Result<u64, Box<dyn std::error::Error + '_>> {
         let mut hasher = std::hash::DefaultHasher::new();
         let mut buf = prost::bytes::BytesMut::new();
 
-        let content = self.screen_content_container.lock()?;
+        let content = content.lock()?;
         content.encode(&mut buf)?;
         drop(content);
 
@@ -181,7 +181,7 @@ impl ScreenService for MyScreenService {
         _request: Request<ScreenHashRequest>,
     ) -> Result<Response<ScreenHashReply>, Status> {
         info!("Serving /GetScreenHash");
-        let reply = match self.get_hash() {
+        let reply = match MyScreenService::get_hash(&self.screen_content_container) {
             Ok(hash) => ScreenHashReply { hash },
             Err(e) => {
                 error!("Error computing hash: {:#?}", e);
