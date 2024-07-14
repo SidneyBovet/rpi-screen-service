@@ -9,6 +9,7 @@ use std::{
     hash::{Hash, Hasher},
     sync::{Arc, Mutex}, time::SystemTime,
 };
+use chrono::Timelike;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
@@ -16,10 +17,18 @@ fn hash(content: &Arc<Mutex<ScreenContentReply>>) -> Result<u64, Box<dyn std::er
     let mut hasher = std::hash::DefaultHasher::new();
     let mut buf = prost::bytes::BytesMut::new();
 
-    let content = content.lock()?;
-    content.encode(&mut buf)?;
-    drop(content);
+    {
+        let mut content = content.lock()?;
+        // Update the time, in case minutes have changed since our last hash
+        let now = chrono::offset::Local::now();
+        content.now = Some(Time {
+            hours: now.hour(),
+            minutes: now.minute(),
+        });
+        content.encode(&mut buf)?;
+    }
 
+    // Hash the proto bytes
     buf.hash(&mut hasher);
     Ok(hasher.finish())
 }
