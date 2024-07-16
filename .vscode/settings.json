@@ -1,0 +1,4 @@
+{
+    "rust-analyzer.inlayHints.genericParameterHints.type.enable": true,
+    "rust-analyzer.cargo.features": "all"
+}
