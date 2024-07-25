@@ -5,7 +5,7 @@ use log::{debug, error, info, warn};
 use prost_types::Timestamp;
 use reqwest::Client;
 use std::sync::{Arc, Mutex};
-use tokio::time::Duration;
+use tokio::time::{Duration, Instant};
 
 #[derive(Debug)]
 // We switch from one to the other for manual testing, but it's actually fine to keep both.
@@ -25,10 +25,10 @@ pub struct GcalUpdater {
 
 #[tonic::async_trait]
 impl DataUpdater for GcalUpdater {
-    fn get_period(&self) -> Duration {
+    fn get_next_update_time(&self) -> Instant {
         match self.update_mode {
-            GcalUpdateMode::Dummy => Duration::from_secs(29),
-            GcalUpdateMode::Real => self.gcal_period,
+            GcalUpdateMode::Dummy => Instant::now() + Duration::from_secs(29),
+            GcalUpdateMode::Real => Instant::now() + self.gcal_period,
         }
     }
 

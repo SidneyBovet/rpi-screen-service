@@ -10,10 +10,7 @@ use quick_xml::Reader;
 use reqwest::Client;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tokio::time::Duration;
-
-// In case we have no next departure after an update, this is the time after which we want to be run again.
-const DEFAULT_UPDATE_PERIOD: Duration = Duration::from_secs(600);
+use tokio::time::{Duration, Instant};
 
 #[derive(Debug)]
 // We switch from one to the other for manual testing, but it's actually fine to keep both.
@@ -28,15 +25,22 @@ pub struct TransportUpdater {
     update_mode: TransportUpdateMode,
     client: Client,
     config: TransportConfig,
-    transport_update_period: Duration,
+    transport_next_update: Instant,
 }
 
 #[tonic::async_trait]
 impl DataUpdater for TransportUpdater {
-    fn get_period(&self) -> Duration {
+    fn get_next_update_time(&self) -> Instant {
         match self.update_mode {
-            TransportUpdateMode::Dummy => Duration::from_secs(19),
-            TransportUpdateMode::Real => self.transport_update_period,
+            TransportUpdateMode::Dummy => Instant::now() + Duration::from_secs(21),
+            TransportUpdateMode::Real => {
+                if self.transport_next_update < Instant::now() {
+                    warn!("Next planned update is in the past, returning the default next update (in 10 minutes)");
+                    get_default_next_update_time()
+                } else {
+                    self.transport_next_update
+                }
+            }
         }
     }
 
@@ -54,9 +58,13 @@ impl DataUpdater for TransportUpdater {
             }
             TransportUpdateMode::Real => {
                 destinations = match self.get_departures().await {
-                    Ok(d) => d,
+                    Ok(mut departures) => {
+                        self.set_next_update_time(&mut departures);
+                        departures
+                    }
                     Err(e) => {
                         error!("Error getting next departures: {}", e);
+                        self.transport_next_update = get_default_next_update_time();
                         vec![]
                     }
                 }
@@ -82,7 +90,7 @@ impl TransportUpdater {
             update_mode,
             client: Client::new(),
             config: transport_config.to_owned(),
-            transport_update_period: DEFAULT_UPDATE_PERIOD,
+            transport_next_update: get_default_next_update_time(),
         })
     }
 
@@ -92,47 +100,59 @@ impl TransportUpdater {
         // - config's stop as starting point (do we need the name?)
         // - hardcode other options from https://opentransportdata.swiss/explorer/?api=ojp
         let api_url = &self.config.url;
-        let api_key = &self.config.api_key;
+        let _api_key = &self.config.api_key;
         let body = self.client.get(api_url).send().await?.text().await?;
 
-        let mut departures = extract_departures(&body, &self.config)
-            .inspect_err(|e| error!("Error parsing next departures: {:?}", e))?;
-        // TODO: update transport_update_period so we update a few seconds after the earliest arrival in our departures
+        extract_departures(&body, &self.config)
+    }
+
+    fn set_next_update_time(&mut self, departures: &mut Vec<Departure>) {
         departures.sort_by_key(|departure| {
             departure
                 .departure_time
                 .map_or(i64::MAX, |departure| departure.seconds)
         });
-        // TODO: make the update interface's update method mutable, so we can change things in here
-        let todo = self.get_duration_to_next_departure(departures.first(), Duration::from_secs(1));
-        info!("Next departure is {:?}, will update again in {} seconds", departures.first(), todo.as_secs());
-        Ok(departures)
+        match self.get_duration_to_next_departure(departures.first(), Duration::from_secs(1)) {
+            Ok(next_update) => {
+                info!(
+                    "Next departure is {:?}, will update again at {:?}",
+                    departures.first(),
+                    next_update
+                );
+                self.transport_next_update = next_update;
+            }
+            Err(e) => {
+                warn!(
+                    "Error getting next update time: {} -- setting default 10 minutes from now",
+                    e
+                );
+                self.transport_next_update = get_default_next_update_time();
+            }
+        }
     }
 
     fn get_duration_to_next_departure(
         &self,
         next_departure: Option<&Departure>,
         offset: Duration,
-    ) -> Duration {
-        let Some(departure_sec) = next_departure
-            .map(|d| d.departure_time)
-            .flatten()
-            .map(|ts| ts.seconds)
-        else {
-            return DEFAULT_UPDATE_PERIOD;
-        };
-        // This is not super nice, we just do it at seconds precision. But hey, it should work, no?
-        let Ok(departure_sec) = u64::try_from(departure_sec) else {
-            warn!(
-                "Couldn't cast the departure seconds from i64 to u64: {}",
-                departure_sec
-            );
-            return DEFAULT_UPDATE_PERIOD;
-        };
-        let now_sec = u64::from(chrono::offset::Local::now().second());
+    ) -> Result<Instant, Box<dyn std::error::Error>> {
+        let departure_utc_sec = u64::try_from(
+            next_departure
+                .map(|d| d.departure_time)
+                .flatten()
+                .map(|ts| ts.seconds)
+                .ok_or("No next departure")?,
+        )?;
+        let now_utc_sec = u64::from(chrono::offset::Utc::now().second());
 
-        Duration::from_secs(departure_sec - now_sec) + offset
+        // This is probably bogous as hell, with all the Unix TS and timezones shenanigans
+        Ok(Instant::now() + Duration::from_secs(departure_utc_sec - now_utc_sec) + offset)
     }
+}
+
+// If we don't have any upcoming departure, this default asks for us to re-run in 10 minutes
+fn get_default_next_update_time() -> Instant {
+    Instant::now() + Duration::from_secs(600)
 }
 
 #[derive(Debug, Default)]

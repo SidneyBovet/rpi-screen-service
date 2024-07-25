@@ -4,7 +4,7 @@ use log::{error, info, warn};
 use reqwest::Client;
 use scraper::{ElementRef, Html, Selector};
 use std::sync::{Arc, Mutex};
-use tokio::time::Duration;
+use tokio::time::{Duration, Instant};
 
 #[derive(Debug)]
 // We switch from one to the other for manual testing, but it's actually fine to keep both.
@@ -24,10 +24,10 @@ pub struct KittyUpdater {
 
 #[tonic::async_trait]
 impl DataUpdater for KittyUpdater {
-    fn get_period(&self) -> Duration {
+    fn get_next_update_time(&self) -> Instant {
         match self.update_mode {
-            KittyUpdateMode::Dummy => Duration::from_secs(19),
-            KittyUpdateMode::Real => self.kitty_period,
+            KittyUpdateMode::Dummy => Instant::now() + Duration::from_secs(19),
+            KittyUpdateMode::Real => Instant::now() + self.kitty_period,
         }
     }
 

@@ -42,10 +42,9 @@ impl MyScreenService {
         tokio::spawn(async move {
             let mut kitty_updater = KittyUpdater::new(update_mode, &config_copy)
                 .expect("Error creating the Kitty updater");
-            let mut interval = tokio::time::interval(kitty_updater.get_period());
             loop {
-                interval.tick().await;
                 kitty_updater.update(&container).await;
+                tokio::time::sleep_until(kitty_updater.get_next_update_time()).await;
             }
         });
     }
@@ -56,10 +55,9 @@ impl MyScreenService {
         tokio::spawn(async move {
             let mut gcal_updater = GcalUpdater::new(update_mode, &config_copy)
                 .expect("Error creating the gcal updater");
-            let mut interval = tokio::time::interval(gcal_updater.get_period());
             loop {
-                interval.tick().await;
                 gcal_updater.update(&container).await;
+                tokio::time::sleep_until(gcal_updater.get_next_update_time()).await;
             }
         });
     }
@@ -69,10 +67,9 @@ impl MyScreenService {
         let container = Arc::clone(&self.screen_content_container);
         tokio::spawn(async move {
             let mut transport_updater = TransportUpdater::new(update_mode, &config_copy).expect("Error creating the transport updater");
-            let mut interval = tokio::time::interval(transport_updater.get_period());
             loop {
-                interval.tick().await;
                 transport_updater.update(&container).await;
+                tokio::time::sleep_until(transport_updater.get_next_update_time()).await;
             }
         });
     }
