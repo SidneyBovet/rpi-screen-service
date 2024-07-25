@@ -95,15 +95,24 @@ impl TransportUpdater {
     }
 
     async fn get_departures(&self) -> Result<Vec<Departure>, Box<dyn std::error::Error>> {
-        // TODO (using the quick-xml Writer)
-        // - use now() to set time
-        // - config's stop as starting point (do we need the name?)
-        // - hardcode other options from https://opentransportdata.swiss/explorer/?api=ojp
         let api_url = &self.config.url;
-        let _api_key = &self.config.api_key;
-        let body = self.client.get(api_url).send().await?.text().await?;
+        let api_key = &self.config.api_key;
+        // TODO: do we need the name?
+        let request_body = create_ojp_request(&self.config, &chrono::Utc::now());
+        let response_body = self
+            .client
+            .post(api_url)
+            .bearer_auth(api_key)
+            .body(request_body)
+            .send()
+            .await?
+            .text()
+            .await?;
 
-        extract_departures(&body, &self.config)
+        // TODO: remove this, or inspect more, print early error, and return
+        info!("Received response: {}", response_body);
+
+        extract_departures(&response_body, &self.config)
     }
 
     fn set_next_update_time(&mut self, departures: &mut Vec<Departure>) {
@@ -153,6 +162,40 @@ impl TransportUpdater {
 // If we don't have any upcoming departure, this default asks for us to re-run in 10 minutes
 fn get_default_next_update_time() -> Instant {
     Instant::now() + Duration::from_secs(600)
+}
+
+fn create_ojp_request(config: &TransportConfig, now: &chrono::DateTime<chrono::Utc>) -> String {
+    let now_utc_string = now.format("%Y-%m-%dT%H:%M:%S%.3fZ");
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<OJP xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.siri.org.uk/siri" version="1.0" xmlns:ojp="http://www.vdv.de/ojp" xsi:schemaLocation="http://www.siri.org.uk/siri ../ojp-xsd-v1.0/OJP.xsd">
+    <OJPRequest>
+        <ServiceRequest>
+            <RequestTimestamp>{}</RequestTimestamp>
+            <RequestorRef>API-Explorer</RequestorRef>
+            <ojp:OJPStopEventRequest>
+                <RequestTimestamp>{}</RequestTimestamp>
+                <ojp:Location>
+                    <ojp:PlaceRef>
+                        <StopPlaceRef>{}</StopPlaceRef>
+                        <ojp:LocationName>
+                            <ojp:Text>Bern</ojp:Text>
+                        </ojp:LocationName>
+                    </ojp:PlaceRef>
+                    <ojp:DepArrTime>{}</ojp:DepArrTime>
+                </ojp:Location>
+                <ojp:Params>
+                    <ojp:NumberOfResults>10</ojp:NumberOfResults>
+                    <ojp:StopEventType>departure</ojp:StopEventType>
+                    <ojp:IncludeRealtimeData>true</ojp:IncludeRealtimeData>
+                </ojp:Params>
+            </ojp:OJPStopEventRequest>
+        </ServiceRequest>
+    </OJPRequest>
+</OJP>
+"#,
+        now_utc_string, now_utc_string, config.stop_id, now_utc_string
+    )
 }
 
 #[derive(Debug, Default)]
@@ -358,11 +401,9 @@ fn get_time(text: &BytesText) -> Result<Timestamp, Box<dyn std::error::Error>> {
 
 #[cfg(test)]
 mod tests {
-    use std::vec;
-
-    use api_config::transport_config::DestinationPoints;
-
     use super::*;
+    use api_config::transport_config::DestinationPoints;
+    use std::vec;
 
     #[test]
     fn extracts_departures() {
@@ -557,5 +598,47 @@ mod tests {
     #[test]
     fn enum_string_check() {
         assert_eq!(DestinationEnum::Flon.as_str_name(), "FLON");
+    }
+
+    #[test]
+    fn makes_request() {
+        let time = "2024-07-26T09:42:09.123Z";
+        let fake_now = chrono::NaiveDateTime::parse_from_str(time, "%Y-%m-%dT%H:%M:%S%.3fZ")
+            .unwrap()
+            .and_utc();
+        let expected_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<OJP xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.siri.org.uk/siri" version="1.0" xmlns:ojp="http://www.vdv.de/ojp" xsi:schemaLocation="http://www.siri.org.uk/siri ../ojp-xsd-v1.0/OJP.xsd">
+    <OJPRequest>
+        <ServiceRequest>
+            <RequestTimestamp>2024-07-26T09:42:09.123Z</RequestTimestamp>
+            <RequestorRef>API-Explorer</RequestorRef>
+            <ojp:OJPStopEventRequest>
+                <RequestTimestamp>2024-07-26T09:42:09.123Z</RequestTimestamp>
+                <ojp:Location>
+                    <ojp:PlaceRef>
+                        <StopPlaceRef>123</StopPlaceRef>
+                        <ojp:LocationName>
+                            <ojp:Text>Bern</ojp:Text>
+                        </ojp:LocationName>
+                    </ojp:PlaceRef>
+                    <ojp:DepArrTime>2024-07-26T09:42:09.123Z</ojp:DepArrTime>
+                </ojp:Location>
+                <ojp:Params>
+                    <ojp:NumberOfResults>10</ojp:NumberOfResults>
+                    <ojp:StopEventType>departure</ojp:StopEventType>
+                    <ojp:IncludeRealtimeData>true</ojp:IncludeRealtimeData>
+                </ojp:Params>
+            </ojp:OJPStopEventRequest>
+        </ServiceRequest>
+    </OJPRequest>
+</OJP>
+"#;
+        let config = TransportConfig {
+            url: "".into(),
+            api_key: "".into(),
+            stop_id: 123,
+            destination_points: vec![],
+        };
+        assert_eq!(create_ojp_request(&config, &fake_now), expected_xml);
     }
 }
