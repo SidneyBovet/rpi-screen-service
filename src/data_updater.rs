@@ -4,6 +4,6 @@ use tokio::time::Duration;
 
 #[tonic::async_trait]
 pub trait DataUpdater {
-    async fn update(&self, screen_content: &Arc<Mutex<ScreenContentReply>>);
+    async fn update(&mut self, screen_content: &Arc<Mutex<ScreenContentReply>>);
     fn get_period(&self) -> Duration;
 }

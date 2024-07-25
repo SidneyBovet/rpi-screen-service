@@ -51,8 +51,8 @@ fn get_dummy_proto() -> ScreenContentReply {
         },
     ];
     let bus_departures = vec![
-        Departure {destination: departure::Destination::Flon.into(), departure_time: Some(Timestamp::from(SystemTime::now()))},
-        Departure {destination: departure::Destination::Renens.into(), departure_time: Some(Timestamp::from(SystemTime::now()))},
+        Departure {destination_enum: departure::DestinationEnum::Flon.into(), departure_time: Some(Timestamp::from(SystemTime::now()))},
+        Departure {destination_enum: departure::DestinationEnum::Renens.into(), departure_time: Some(Timestamp::from(SystemTime::now()))},
     ];
     let next_upcoming_event = Some(CalendarEvent {
         event_title: "This is a rather long event title".into(),

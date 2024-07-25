@@ -18,8 +18,20 @@ message KittyConfig {
     string url = 2;
 }
 
+message TransportConfig {
+    message DestinationPoints {
+        repeated uint32 stops = 1;
+        string destination_name = 2;
+    }
+    string url = 1;
+    string api_key = 2;
+    uint32 stop_id = 3;
+    repeated DestinationPoints destination_points = 4;
+}
+
 message ApiConfig {
     Server server = 1;
     GoogleCalendarApi gcal = 2;
     KittyConfig kitty = 3;
+    TransportConfig transport = 4;
 }

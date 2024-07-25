@@ -9,6 +9,7 @@ use crate::screen_service::screen_service_server::ScreenService;
 use crate::screen_service::{
     ScreenContentReply, ScreenContentRequest, ScreenHashReply, ScreenHashRequest, Time,
 };
+use crate::transport_updater::TransportUpdater;
 use chrono::Timelike;
 use log::{error, debug};
 use prost::Message;
@@ -29,16 +30,17 @@ impl MyScreenService {
     }
 
     pub fn start_backgound_updates(&self) {
-        // Start the Kitty updater in dummy mode, to avoid spamming the server if we got something wrong
+        // Start the updaters in dummy mode, to avoid spamming the server if we got something wrong
         self.start_kitty_updates(crate::kitty_updater::KittyUpdateMode::Dummy);
-        self.start_gcal_updates(crate::gcal_updater::GcalUpdateMode::Real);
+        self.start_gcal_updates(crate::gcal_updater::GcalUpdateMode::Dummy);
+        self.start_transport_updates(crate::transport_updater::TransportUpdateMode::Dummy);
     }
 
     fn start_kitty_updates(&self, update_mode: crate::kitty_updater::KittyUpdateMode) {
         let config_copy = self.config.clone();
         let container = Arc::clone(&self.screen_content_container);
         tokio::spawn(async move {
-            let kitty_updater = KittyUpdater::new(update_mode, &config_copy)
+            let mut kitty_updater = KittyUpdater::new(update_mode, &config_copy)
                 .expect("Error creating the Kitty updater");
             let mut interval = tokio::time::interval(kitty_updater.get_period());
             loop {
@@ -52,12 +54,25 @@ impl MyScreenService {
         let config_copy = self.config.clone();
         let container = Arc::clone(&self.screen_content_container);
         tokio::spawn(async move {
-            let gcal_updater = GcalUpdater::new(update_mode, &config_copy)
+            let mut gcal_updater = GcalUpdater::new(update_mode, &config_copy)
                 .expect("Error creating the gcal updater");
             let mut interval = tokio::time::interval(gcal_updater.get_period());
             loop {
                 interval.tick().await;
                 gcal_updater.update(&container).await;
+            }
+        });
+    }
+
+    fn start_transport_updates(&self, update_mode: crate::transport_updater::TransportUpdateMode) {
+        let config_copy = self.config.clone();
+        let container = Arc::clone(&self.screen_content_container);
+        tokio::spawn(async move {
+            let mut transport_updater = TransportUpdater::new(update_mode, &config_copy).expect("Error creating the transport updater");
+            let mut interval = tokio::time::interval(transport_updater.get_period());
+            loop {
+                interval.tick().await;
+                transport_updater.update(&container).await;
             }
         });
     }

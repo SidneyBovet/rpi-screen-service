@@ -4,6 +4,7 @@ mod kitty_updater;
 mod dummy_client;
 mod data_updater;
 mod gcal_updater;
+mod transport_updater;
 
 use screen_service::screen_service_server::ScreenServiceServer;
 use tonic::transport::Server;

@@ -31,7 +31,7 @@ impl DataUpdater for KittyUpdater {
         }
     }
 
-    async fn update(&self, screen_content: &Arc<Mutex<ScreenContentReply>>) {
+    async fn update(&mut self, screen_content: &Arc<Mutex<ScreenContentReply>>) {
         info!("Updating {:?} Kitty", self.update_mode);
         let debts;
         match self.update_mode {

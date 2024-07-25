@@ -32,7 +32,7 @@ impl DataUpdater for GcalUpdater {
         }
     }
 
-    async fn update(&self, screen_content: &Arc<Mutex<ScreenContentReply>>) {
+    async fn update(&mut self, screen_content: &Arc<Mutex<ScreenContentReply>>) {
         info!("Updating {:?} gCal", self.update_mode);
         let event = match self.update_mode {
             GcalUpdateMode::Dummy => Some(CalendarEvent {
@@ -99,6 +99,7 @@ fn parse_next_event(ics: String) -> Result<CalendarEvent, Box<dyn std::error::Er
             first_upcoming_event.event_title = title.to_string();
         } else if let Some(ts) = line.strip_prefix("DTSTART:") {
             debug!("Parsing ICS timestamp: {:#?}", ts);
+            // Consider exporting this in a helper module (see also transport updater)
             let rust_ts = NaiveDateTime::parse_from_str(ts, "%Y%m%dT%H%M%SZ")
                 .map_err(|e| format!("ICS timestamp parsing error {:?} parsing '{}'", e, ts))?;
             debug!("Parsed timestamp: {:#?}", rust_ts);
