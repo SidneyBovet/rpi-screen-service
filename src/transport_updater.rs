@@ -97,21 +97,18 @@ impl TransportUpdater {
     async fn get_departures(&self) -> Result<Vec<Departure>, Box<dyn std::error::Error>> {
         let api_url = &self.config.url;
         let api_key = &self.config.api_key;
-        // TODO: do we need the name?
         let request_body = create_ojp_request(&self.config, &chrono::Utc::now());
-        let response_body = self
+
+        let request = self
             .client
             .post(api_url)
+            .header("Content-Type", "application/xml")
             .bearer_auth(api_key)
-            .body(request_body)
-            .send()
-            .await?
-            .text()
-            .await?;
+            .body(request_body);
 
-        // TODO: remove this, or inspect more, print early error, and return
-        info!("Received response: {}", response_body);
+        let response_body = request.send().await?.text().await?;
 
+        debug!("Received transport response: {:?}", response_body);
         extract_departures(&response_body, &self.config)
     }
 
@@ -145,17 +142,22 @@ impl TransportUpdater {
         next_departure: Option<&Departure>,
         offset: Duration,
     ) -> Result<Instant, Box<dyn std::error::Error>> {
-        let departure_utc_sec = u64::try_from(
-            next_departure
-                .map(|d| d.departure_time)
-                .flatten()
-                .map(|ts| ts.seconds)
-                .ok_or("No next departure")?,
-        )?;
-        let now_utc_sec = u64::from(chrono::offset::Utc::now().second());
+        let departure_utc_sec = next_departure
+            .map(|d| d.departure_time)
+            .flatten()
+            .map(|ts| ts.seconds)
+            .ok_or("No next departure")?;
+        let now_utc_sec = chrono::offset::Utc::now().timestamp();
+
+        if departure_utc_sec - now_utc_sec < 0 && departure_utc_sec - now_utc_sec > -60 {
+            info!("Supposed next departure is ~now; retying in one minute");
+            return Ok(Instant::now() + Duration::from_secs(60))
+        }
 
         // This is probably bogous as hell, with all the Unix TS and timezones shenanigans
-        Ok(Instant::now() + Duration::from_secs(departure_utc_sec - now_utc_sec) + offset)
+        Ok(Instant::now()
+            + Duration::from_secs(u64::try_from(departure_utc_sec - now_utc_sec)?)
+            + offset)
     }
 }
 
@@ -172,14 +174,14 @@ fn create_ojp_request(config: &TransportConfig, now: &chrono::DateTime<chrono::U
     <OJPRequest>
         <ServiceRequest>
             <RequestTimestamp>{}</RequestTimestamp>
-            <RequestorRef>API-Explorer</RequestorRef>
+            <RequestorRef>raspi-screen-server</RequestorRef>
             <ojp:OJPStopEventRequest>
                 <RequestTimestamp>{}</RequestTimestamp>
                 <ojp:Location>
                     <ojp:PlaceRef>
                         <StopPlaceRef>{}</StopPlaceRef>
                         <ojp:LocationName>
-                            <ojp:Text>Bern</ojp:Text>
+                            <ojp:Text>ignored</ojp:Text>
                         </ojp:LocationName>
                     </ojp:PlaceRef>
                     <ojp:DepArrTime>{}</ojp:DepArrTime>
@@ -228,7 +230,7 @@ fn extract_departures(
                     b"ojp:StopEventResult" => debug!("Found stop event..."),
                     b"ojp:TimetabledTime" => {
                         let text = reader.read_event();
-                        debug_print(&text, "Departure time");
+                        debug_print(&text, "Departure time (timetable)");
                         match text {
                             Ok(Event::Text(t)) => {
                                 let time = get_time(&t)?;
@@ -241,7 +243,23 @@ fn extract_departures(
                                 );
                             }
                         };
-                    }
+                    },
+                    b"ojp:EstimatedTime" => {
+                        let text = reader.read_event();
+                        debug_print(&text, "Departure time (estimated)");
+                        match text {
+                            Ok(Event::Text(t)) => {
+                                let time = get_time(&t)?;
+                                departure.departure_time = Some(time);
+                            }
+                            other => {
+                                error!(
+                                    "Expected text type after 'TimetabledTime', got {:?}",
+                                    other
+                                );
+                            }
+                        };
+                    },
                     b"ojp:DestinationStopPointRef" => {
                         let text = reader.read_event();
                         debug_print(&text, "Destination ID");
@@ -403,7 +421,7 @@ fn get_time(text: &BytesText) -> Result<Timestamp, Box<dyn std::error::Error>> {
 mod tests {
     use super::*;
     use api_config::transport_config::DestinationPoints;
-    use std::vec;
+    use std::{i64, vec};
 
     #[test]
     fn extracts_departures() {
@@ -423,6 +441,7 @@ mod tests {
                                 </ojp:StopPointName>
                                 <ojp:ServiceDeparture>
                                     <ojp:TimetabledTime>2024-07-23T11:02:00Z</ojp:TimetabledTime>
+                                    <ojp:EstimatedTime>2024-07-23T11:02:30Z</ojp:EstimatedTime>
                                 </ojp:ServiceDeparture>
                                 <ojp:Order>14</ojp:Order>
                             </ojp:CallAtStop>
@@ -483,6 +502,7 @@ mod tests {
                                 </ojp:StopPointName>
                                 <ojp:ServiceDeparture>
                                     <ojp:TimetabledTime>2024-07-23T11:14:00Z</ojp:TimetabledTime>
+                                    <ojp:EstimatedTime>2024-07-23T11:14:30Z</ojp:EstimatedTime>
                                 </ojp:ServiceDeparture>
                                 <ojp:Order>1</ojp:Order>
                             </ojp:CallAtStop>
@@ -513,6 +533,7 @@ mod tests {
                                 </ojp:StopPointName>
                                 <ojp:ServiceDeparture>
                                     <ojp:TimetabledTime>2024-07-23T11:15:00Z</ojp:TimetabledTime>
+                                    <ojp:EstimatedTime>2024-07-23T11:15:30Z</ojp:EstimatedTime>
                                 </ojp:ServiceDeparture>
                                 <ojp:Order>4</ojp:Order>
                             </ojp:CallAtStop>
@@ -543,6 +564,7 @@ mod tests {
                                 </ojp:StopPointName>
                                 <ojp:ServiceDeparture>
                                     <ojp:TimetabledTime>2024-07-23T11:15:00Z</ojp:TimetabledTime>
+                                    <ojp:EstimatedTime>2024-07-23T11:15:30Z</ojp:EstimatedTime>
                                 </ojp:ServiceDeparture>
                                 <ojp:Order>8</ojp:Order>
                             </ojp:CallAtStop>
@@ -583,8 +605,26 @@ mod tests {
                 },
             ],
         };
-        let departures = extract_departures(&body, &config).expect("should succeed");
+        let mut departures = extract_departures(&body, &config).expect("should succeed");
+        // Let's sort to avoid any nondeterministic flakiness
+        departures.sort_by_key(|d| d.departure_time.map_or(i64::MAX, |t| t.seconds));
         assert_eq!(departures.len(), 2);
+        // Make sure the code picked up the estimated departure, not the timetable one
+        assert_eq!(
+            departures[0]
+                .departure_time
+                .expect("expected a departure with a timestamp")
+                .seconds,
+            1721732550
+        );
+        // The second departure doesn't have an estimated time, check that we did fall back to the timetable time
+        assert_eq!(
+            departures[1]
+                .departure_time
+                .expect("expected a departure with a timestamp")
+                .seconds,
+            1721732640
+        );
     }
 
     #[test]
@@ -611,14 +651,14 @@ mod tests {
     <OJPRequest>
         <ServiceRequest>
             <RequestTimestamp>2024-07-26T09:42:09.123Z</RequestTimestamp>
-            <RequestorRef>API-Explorer</RequestorRef>
+            <RequestorRef>raspi-screen-server</RequestorRef>
             <ojp:OJPStopEventRequest>
                 <RequestTimestamp>2024-07-26T09:42:09.123Z</RequestTimestamp>
                 <ojp:Location>
                     <ojp:PlaceRef>
                         <StopPlaceRef>123</StopPlaceRef>
                         <ojp:LocationName>
-                            <ojp:Text>Bern</ojp:Text>
+                            <ojp:Text>ignored</ojp:Text>
                         </ojp:LocationName>
                     </ojp:PlaceRef>
                     <ojp:DepArrTime>2024-07-26T09:42:09.123Z</ojp:DepArrTime>
