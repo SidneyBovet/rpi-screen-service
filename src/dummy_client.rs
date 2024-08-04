@@ -61,10 +61,56 @@ fn start_hash_queries(api_config: &ApiConfig) -> JoinHandle<()> {
                 hash = new_hash;
                 info!("Content changed, sending /GetScreenContent");
                 let content = make_full_request(&mut client).await;
-                info!("{:#?}", content);
+                content_pretty_print(content);
             }
         }
     })
+}
+
+fn content_pretty_print(content: ScreenContentReply) {
+    // TODO: maybe handle all the unwraps
+    // TODO: timestamps to local time
+    // TODO: consider removing the time field, since we need now() anyway (or find a way around it)
+    info!("------------------");
+    info!("[b:{}]", content.brightness);
+    info!("[e:{}]", content.error);
+    if let Some(time) = content.now {
+        info!("{}:{}", time.hours, time.minutes);
+    }
+    if !content.kitty_debts.is_empty() {
+        let debts = content
+            .kitty_debts
+            .iter()
+            .map(|debt| {
+                format!(
+                    "{}>{}:{}",
+                    debt.who.chars().next().unwrap(),
+                    debt.whom.chars().next().unwrap(),
+                    debt.how_much as i32
+                )
+            })
+            .collect::<Vec<String>>()
+            .join(" - ");
+        info!("{}", debts);
+    }
+    if !content.bus_departures.is_empty() {
+        let departures = content
+            .bus_departures
+            .iter()
+            .map(|dep| {
+                format!(
+                    "{}:{}",
+                    dep.destination_enum().as_str_name().chars().next().unwrap(),
+                    dep.departure_time.unwrap().seconds
+                )
+            })
+            .collect::<Vec<String>>()
+            .join(" - ");
+        info!("{}", departures);
+    }
+    if let Some(event) = content.next_upcoming_event {
+        info!("{}-{}", event.event_start.unwrap().seconds, event.event_title);
+    }
 }
 
 fn get_server_address(api_config: &ApiConfig) -> Endpoint {
