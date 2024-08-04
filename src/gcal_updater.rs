@@ -1,7 +1,7 @@
 use crate::screen_service::{CalendarEvent, ScreenContentReply};
 use crate::{config_extractor::api_config, data_updater::DataUpdater};
 use chrono::{Datelike, NaiveDateTime, Timelike};
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use prost_types::Timestamp;
 use reqwest::Client;
 use std::sync::{Arc, Mutex};
@@ -43,7 +43,8 @@ impl DataUpdater for GcalUpdater {
                 .get_next_event()
                 .await
                 .inspect_err(|e| error!("Error getting gCal event: {}", e))
-                .ok(),
+                .ok()
+                .flatten(),
         };
         match screen_content.lock() {
             Ok(mut content) => content.next_upcoming_event = event,
@@ -75,9 +76,8 @@ impl GcalUpdater {
         })
     }
 
-    async fn get_next_event(&self) -> Result<CalendarEvent, Box<dyn std::error::Error>> {
+    async fn get_next_event(&self) -> Result<Option<CalendarEvent>, Box<dyn std::error::Error>> {
         let ics: String = self.client.get(&self.ics_url).send().await?.text().await?;
-        warn!("TODO: move this to parsing errors?");
         parse_next_event(ics).map_err(|err| format!("Error parsing ics content: {:?}", err).into())
     }
 }
@@ -85,18 +85,20 @@ impl GcalUpdater {
 // Note: this function assumes that the ics passed used the following gCal options:
 // ?futureevents=true&orderby=starttime&sortorder=ascending
 // This means that the first event in the body is the next upcoming event, so we can just look that up.
-fn parse_next_event(ics: String) -> Result<CalendarEvent, Box<dyn std::error::Error>> {
+fn parse_next_event(ics: String) -> Result<Option<CalendarEvent>, Box<dyn std::error::Error>> {
     let mut lines = ics.lines();
 
     // None of the ical parsing crates out there do a good job, so let's just do it manually.
-    let mut first_upcoming_event = CalendarEvent::default();
+    let mut first_upcoming_event: Option<CalendarEvent> = None;
     while let Some(line) = lines.next() {
         if line == "END:VEVENT" {
             debug!("Fund end of first event");
             break;
         } else if let Some(title) = line.strip_prefix("SUMMARY:") {
             debug!("Found event title: {}", title);
-            first_upcoming_event.event_title = title.to_string();
+            first_upcoming_event
+                .get_or_insert(CalendarEvent::default())
+                .event_title = title.to_string();
         } else if let Some(ts) = line.strip_prefix("DTSTART:") {
             debug!("Parsing ICS timestamp: {:#?}", ts);
             // Consider exporting this in a helper module (see also transport updater)
@@ -112,7 +114,9 @@ fn parse_next_event(ics: String) -> Result<CalendarEvent, Box<dyn std::error::Er
                 rust_ts.second().try_into().unwrap(),
             )
             .map_err(|e| format!("Proto timestamp creation error: {:?}", e))?;
-            first_upcoming_event.event_start = Some(time);
+            first_upcoming_event
+                .get_or_insert(CalendarEvent::default())
+                .event_start = Some(time);
         }
     }
 
@@ -160,14 +164,14 @@ END:VCALENDAR
 "
         .into();
         let parsed = parse_next_event(ics).unwrap();
-        let expected = CalendarEvent {
+        let expected = Some(CalendarEvent {
             event_start: Some(Timestamp {
                 // 2024-07-20 11:00 UTC
                 seconds: 1721473200,
                 nanos: 0,
             }),
             event_title: "Test event".into(),
-        };
+        });
         assert_eq!(parsed, expected);
     }
 
@@ -184,16 +188,14 @@ END:VCALENDAR
 "
         .into();
         let parsed = parse_next_event(ics).unwrap();
-        let expected = CalendarEvent::default();
-        assert_eq!(parsed, expected);
+        assert_eq!(parsed, None);
     }
 
     #[test]
     fn returns_default_on_empty_ics() {
         let ics = "".into();
         let parsed = parse_next_event(ics).unwrap();
-        let expected = CalendarEvent::default();
-        assert_eq!(parsed, expected);
+        assert_eq!(parsed, None);
     }
 
     #[test]
@@ -204,8 +206,7 @@ not?an
 ]});"
             .into();
         let parsed = parse_next_event(ics).unwrap();
-        let expected = CalendarEvent::default();
-        assert_eq!(parsed, expected);
+        assert_eq!(parsed, None);
     }
 
     #[test]
