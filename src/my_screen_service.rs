@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
@@ -11,7 +12,7 @@ use crate::screen_service::{
 };
 use crate::transport_updater::TransportUpdater;
 use chrono::Timelike;
-use log::{error, debug};
+use log::{debug, error, warn};
 use prost::Message;
 use tonic::{Request, Response, Status};
 
@@ -75,8 +76,8 @@ impl MyScreenService {
     }
 
     // Computes the hash of the content proto **after updating its time field**
-    fn get_hash(
-        content: &Arc<Mutex<ScreenContentReply>>,
+    fn get_hash<'a>(
+        &'a self, content: &'a Arc<Mutex<ScreenContentReply>>,
     ) -> Result<u64, Box<dyn std::error::Error + '_>> {
         let mut hasher = std::hash::DefaultHasher::new();
         let mut buf = prost::bytes::BytesMut::new();
@@ -89,6 +90,9 @@ impl MyScreenService {
                 hours: now.hour(),
                 minutes: now.minute(),
             });
+            // Update the brightness according to now
+            content.brightness = self.get_brightness(now.hour()).unwrap_or(1.0);
+            // Serialize the latest proto into our bytes buffer
             content.encode(&mut buf)?;
         }
 
@@ -96,6 +100,25 @@ impl MyScreenService {
         buf.hash(&mut hasher);
         Ok(hasher.finish())
     }
+
+    fn get_brightness(&self, hour: u32) -> Option<f32> {
+        let brightness_map = &self.config.server.as_ref()?.brightness_map;
+        get_brightness_impl(brightness_map, hour).or_else(|| {
+            warn!("Couldn't find a brightness from the config map for hour {}", hour);
+            None
+        })
+    }
+}
+
+fn get_brightness_impl(brightness_map: &HashMap<u32, f32>, hour: u32) -> Option<f32> {
+    let (mut best_hour, mut best_brightness) = (None, None);
+    for (h, b) in brightness_map {
+        if h <= &hour && h > &best_hour.unwrap_or(u32::MIN) {
+            best_hour = Some(*h);
+            best_brightness = Some(*b);
+        }
+    }
+    best_brightness
 }
 
 #[tonic::async_trait]
@@ -125,7 +148,7 @@ impl ScreenService for MyScreenService {
         _request: Request<ScreenHashRequest>,
     ) -> Result<Response<ScreenHashReply>, Status> {
         debug!("Serving /GetScreenHash");
-        let reply = match MyScreenService::get_hash(&self.screen_content_container) {
+        let reply = match self.get_hash(&self.screen_content_container) {
             Ok(hash) => ScreenHashReply { hash },
             Err(e) => {
                 error!("Error computing hash: {:#?}", e);
@@ -133,5 +156,27 @@ impl ScreenService for MyScreenService {
             }
         };
         Ok(Response::new(reply))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn computes_brightness() {
+        let map = HashMap::from([
+            (0, 0.0),
+            (2, 0.5),
+            (3, 0.8),
+            (12, 1.0),
+        ]);
+
+        assert_eq!(get_brightness_impl(&map, 0), Some(0.0));
+        assert_eq!(get_brightness_impl(&map, 1), Some(0.0));
+        assert_eq!(get_brightness_impl(&map, 2), Some(0.5));
+        assert_eq!(get_brightness_impl(&map, 5), Some(0.8));
+        assert_eq!(get_brightness_impl(&map, 11), Some(0.8));
+        assert_eq!(get_brightness_impl(&map, 12), Some(1.0));
     }
 }

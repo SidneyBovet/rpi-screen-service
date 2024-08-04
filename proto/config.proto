@@ -6,6 +6,9 @@ import "google/protobuf/duration.proto";
 message Server {
     string address = 1;
     uint32 port = 2;
+    // A map from hours to brigness values.
+    // hours = 0 to 23, brightness = 0.0 to 1.0
+    map<uint32, float> brightness_map = 3;
 }
 
 message GoogleCalendarApi {

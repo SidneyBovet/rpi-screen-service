@@ -50,7 +50,10 @@ impl DataUpdater for TransportUpdater {
         match self.update_mode {
             TransportUpdateMode::Dummy => {
                 let now = chrono::offset::Local::now();
-                let st: std::time::SystemTime = now.try_into().unwrap();
+                let st: std::time::SystemTime = (now
+                    + chrono::Duration::minutes(now.second().into()))
+                .try_into()
+                .unwrap();
                 destinations = vec![Departure {
                     destination_enum: DestinationEnum::Flon.into(),
                     departure_time: Some(prost_types::Timestamp::from(st)),
@@ -151,7 +154,7 @@ impl TransportUpdater {
 
         if departure_utc_sec - now_utc_sec < 0 && departure_utc_sec - now_utc_sec > -60 {
             info!("Supposed next departure is ~now; retying in one minute");
-            return Ok(Instant::now() + Duration::from_secs(60))
+            return Ok(Instant::now() + Duration::from_secs(60));
         }
 
         // This is probably bogous as hell, with all the Unix TS and timezones shenanigans
@@ -243,7 +246,7 @@ fn extract_departures(
                                 );
                             }
                         };
-                    },
+                    }
                     b"ojp:EstimatedTime" => {
                         let text = reader.read_event();
                         debug_print(&text, "Departure time (estimated)");
@@ -259,7 +262,7 @@ fn extract_departures(
                                 );
                             }
                         };
-                    },
+                    }
                     b"ojp:DestinationStopPointRef" => {
                         let text = reader.read_event();
                         debug_print(&text, "Destination ID");
