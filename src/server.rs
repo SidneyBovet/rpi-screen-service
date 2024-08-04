@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Create the service, and tell it to start the content updates
-    let screen_service = my_screen_service::MyScreenService::new(&config);
+    let mut screen_service = my_screen_service::MyScreenService::new(&config);
     screen_service.start_backgound_updates();
 
     // Start the actual serving

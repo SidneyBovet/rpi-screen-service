@@ -9,6 +9,7 @@ use quick_xml::events::{BytesText, Event};
 use quick_xml::Reader;
 use reqwest::Client;
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use tokio::time::{Duration, Instant};
 
@@ -44,30 +45,38 @@ impl DataUpdater for TransportUpdater {
         }
     }
 
-    async fn update(&mut self, screen_content: &Arc<Mutex<ScreenContentReply>>) {
+    async fn update(
+        &mut self,
+        screen_content: &Arc<Mutex<ScreenContentReply>>,
+        error_bit: &Arc<AtomicBool>,
+    ) {
         info!("Updating {:?} transport", self.update_mode);
         let destinations;
         match self.update_mode {
             TransportUpdateMode::Dummy => {
                 let now = chrono::offset::Local::now();
-                let st: std::time::SystemTime = (now
-                    + chrono::Duration::minutes(now.second().into()))
-                .try_into()
-                .unwrap();
                 destinations = vec![Departure {
                     destination_enum: DestinationEnum::Flon.into(),
-                    departure_time: Some(prost_types::Timestamp::from(st)),
-                }]
+                    departure_time: Some(prost_types::Timestamp::from(
+                        std::time::SystemTime::from(
+                            now + chrono::Duration::minutes(now.second().into()),
+                        ),
+                    )),
+                }];
+                error_bit.store(now.second() % 9 == 0, std::sync::atomic::Ordering::Relaxed);
             }
             TransportUpdateMode::Real => {
                 destinations = match self.get_departures().await {
                     Ok(mut departures) => {
                         self.set_next_update_time(&mut departures);
+                        // Make sure the server knows there are no errors
+                        error_bit.store(false, std::sync::atomic::Ordering::Relaxed);
                         departures
                     }
                     Err(e) => {
                         error!("Error getting next departures: {}", e);
                         self.transport_next_update = get_default_next_update_time();
+                        error_bit.store(true, std::sync::atomic::Ordering::Relaxed);
                         vec![]
                     }
                 }

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use crate::config_extractor::api_config::ApiConfig;
@@ -19,6 +20,7 @@ use tonic::{Request, Response, Status};
 pub struct MyScreenService {
     config: ApiConfig,
     screen_content_container: Arc<Mutex<ScreenContentReply>>,
+    error_statuses: Vec<Arc<AtomicBool>>,
 }
 
 impl MyScreenService {
@@ -27,49 +29,72 @@ impl MyScreenService {
         MyScreenService {
             config: config.clone(),
             screen_content_container,
+            error_statuses: vec![],
         }
     }
 
-    pub fn start_backgound_updates(&self) {
+    pub fn start_backgound_updates(&mut self) {
         // Start the updaters in dummy mode, to avoid spamming the server if we got something wrong
         self.start_kitty_updates(crate::kitty_updater::KittyUpdateMode::Dummy);
         self.start_gcal_updates(crate::gcal_updater::GcalUpdateMode::Dummy);
         self.start_transport_updates(crate::transport_updater::TransportUpdateMode::Dummy);
     }
 
-    fn start_kitty_updates(&self, update_mode: crate::kitty_updater::KittyUpdateMode) {
+    fn start_kitty_updates(&mut self, update_mode: crate::kitty_updater::KittyUpdateMode) {
         let config_copy = self.config.clone();
         let container = Arc::clone(&self.screen_content_container);
+        self.error_statuses.push(Arc::new(AtomicBool::new(false)));
+        let error_bit = self
+            .error_statuses
+            .last()
+            .expect("No error bit in vec when we just pushed one?")
+            .clone();
         tokio::spawn(async move {
             let mut kitty_updater = KittyUpdater::new(update_mode, &config_copy)
                 .expect("Error creating the Kitty updater");
             loop {
-                kitty_updater.update(&container).await;
+                kitty_updater.update(&container, &error_bit).await;
                 tokio::time::sleep_until(kitty_updater.get_next_update_time()).await;
             }
         });
     }
 
-    fn start_gcal_updates(&self, update_mode: crate::gcal_updater::GcalUpdateMode) {
+    fn start_gcal_updates(&mut self, update_mode: crate::gcal_updater::GcalUpdateMode) {
         let config_copy = self.config.clone();
         let container = Arc::clone(&self.screen_content_container);
+        self.error_statuses.push(Arc::new(AtomicBool::new(false)));
+        let error_bit = self
+            .error_statuses
+            .last()
+            .expect("No error bit in vec when we just pushed one?")
+            .clone();
         tokio::spawn(async move {
             let mut gcal_updater = GcalUpdater::new(update_mode, &config_copy)
                 .expect("Error creating the gcal updater");
             loop {
-                gcal_updater.update(&container).await;
+                gcal_updater.update(&container, &error_bit).await;
                 tokio::time::sleep_until(gcal_updater.get_next_update_time()).await;
             }
         });
     }
 
-    fn start_transport_updates(&self, update_mode: crate::transport_updater::TransportUpdateMode) {
+    fn start_transport_updates(
+        &mut self,
+        update_mode: crate::transport_updater::TransportUpdateMode,
+    ) {
         let config_copy = self.config.clone();
         let container = Arc::clone(&self.screen_content_container);
+        self.error_statuses.push(Arc::new(AtomicBool::new(false)));
+        let error_bit = self
+            .error_statuses
+            .last()
+            .expect("No error bit in vec when we just pushed one?")
+            .clone();
         tokio::spawn(async move {
-            let mut transport_updater = TransportUpdater::new(update_mode, &config_copy).expect("Error creating the transport updater");
+            let mut transport_updater = TransportUpdater::new(update_mode, &config_copy)
+                .expect("Error creating the transport updater");
             loop {
-                transport_updater.update(&container).await;
+                transport_updater.update(&container, &error_bit).await;
                 tokio::time::sleep_until(transport_updater.get_next_update_time()).await;
             }
         });
@@ -77,7 +102,8 @@ impl MyScreenService {
 
     // Computes the hash of the content proto **after updating its time field**
     fn get_hash<'a>(
-        &'a self, content: &'a Arc<Mutex<ScreenContentReply>>,
+        &'a self,
+        content: &'a Arc<Mutex<ScreenContentReply>>,
     ) -> Result<u64, Box<dyn std::error::Error + '_>> {
         let mut hasher = std::hash::DefaultHasher::new();
         let mut buf = prost::bytes::BytesMut::new();
@@ -92,6 +118,11 @@ impl MyScreenService {
             });
             // Update the brightness according to now
             content.brightness = self.get_brightness(now.hour()).unwrap_or(1.0);
+            // Update the error bit
+            content.error = self
+                .error_statuses
+                .iter()
+                .any(|e| e.load(std::sync::atomic::Ordering::Relaxed));
             // Serialize the latest proto into our bytes buffer
             content.encode(&mut buf)?;
         }
@@ -104,7 +135,10 @@ impl MyScreenService {
     fn get_brightness(&self, hour: u32) -> Option<f32> {
         let brightness_map = &self.config.server.as_ref()?.brightness_map;
         get_brightness_impl(brightness_map, hour).or_else(|| {
-            warn!("Couldn't find a brightness from the config map for hour {}", hour);
+            warn!(
+                "Couldn't find a brightness from the config map for hour {}",
+                hour
+            );
             None
         })
     }
@@ -165,12 +199,7 @@ mod tests {
 
     #[test]
     fn computes_brightness() {
-        let map = HashMap::from([
-            (0, 0.0),
-            (2, 0.5),
-            (3, 0.8),
-            (12, 1.0),
-        ]);
+        let map = HashMap::from([(0, 0.0), (2, 0.5), (3, 0.8), (12, 1.0)]);
 
         assert_eq!(get_brightness_impl(&map, 0), Some(0.0));
         assert_eq!(get_brightness_impl(&map, 1), Some(0.0));

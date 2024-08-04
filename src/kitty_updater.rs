@@ -1,8 +1,10 @@
 use crate::screen_service::{KittyDebt, ScreenContentReply};
 use crate::{config_extractor::api_config, data_updater::DataUpdater};
+use chrono::Timelike;
 use log::{error, info, warn};
 use reqwest::Client;
 use scraper::{ElementRef, Html, Selector};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use tokio::time::{Duration, Instant};
 
@@ -31,7 +33,11 @@ impl DataUpdater for KittyUpdater {
         }
     }
 
-    async fn update(&mut self, screen_content: &Arc<Mutex<ScreenContentReply>>) {
+    async fn update(
+        &mut self,
+        screen_content: &Arc<Mutex<ScreenContentReply>>,
+        error_bit: &Arc<AtomicBool>,
+    ) {
         info!("Updating {:?} Kitty", self.update_mode);
         let debts;
         match self.update_mode {
@@ -44,13 +50,19 @@ impl DataUpdater for KittyUpdater {
                     who: "foo".into(),
                     how_much: now_seconds,
                     whom: "bar".into(),
-                }]
+                }];
+                error_bit.store(now.second() % 8 == 0, std::sync::atomic::Ordering::Relaxed);
             }
             KittyUpdateMode::Real => {
                 debts = match self.get_debts().await {
-                    Ok(d) => d,
+                    Ok(returned_debts) => {
+                        // Make sure the server knows there are no errors
+                        error_bit.store(false, std::sync::atomic::Ordering::Relaxed);
+                        returned_debts
+                    }
                     Err(e) => {
                         error!("Error getting Kitty debts: {}", e);
+                        error_bit.store(true, std::sync::atomic::Ordering::Relaxed);
                         vec![]
                     }
                 }

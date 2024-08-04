@@ -4,7 +4,9 @@ use chrono::{Datelike, NaiveDateTime, Timelike};
 use log::{debug, error, info};
 use prost_types::Timestamp;
 use reqwest::Client;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 use tokio::time::{Duration, Instant};
 
 #[derive(Debug)]
@@ -32,20 +34,37 @@ impl DataUpdater for GcalUpdater {
         }
     }
 
-    async fn update(&mut self, screen_content: &Arc<Mutex<ScreenContentReply>>) {
+    async fn update(
+        &mut self,
+        screen_content: &Arc<Mutex<ScreenContentReply>>,
+        error_bit: &Arc<AtomicBool>,
+    ) {
         info!("Updating {:?} gCal", self.update_mode);
-        let event = match self.update_mode {
-            GcalUpdateMode::Dummy => Some(CalendarEvent {
-                event_start: Some(Timestamp::from(std::time::SystemTime::now())),
-                event_title: "dummy event".into(),
-            }),
-            GcalUpdateMode::Real => self
-                .get_next_event()
-                .await
-                .inspect_err(|e| error!("Error getting gCal event: {}", e))
-                .ok()
-                .flatten(),
-        };
+        let event;
+        match self.update_mode {
+            GcalUpdateMode::Dummy => {
+                let now = chrono::offset::Local::now();
+                event = Some(CalendarEvent {
+                    event_start: Some(Timestamp::from(SystemTime::from(now))),
+                    event_title: "dummy event".into(),
+                });
+                error_bit.store(now.second() % 10 == 0, std::sync::atomic::Ordering::Relaxed);
+            }
+            GcalUpdateMode::Real => {
+                event = match self.get_next_event().await {
+                    Ok(returned_event) => {
+                        // Make sure the server knows there are no errors
+                        error_bit.store(false, std::sync::atomic::Ordering::Relaxed);
+                        returned_event
+                    }
+                    Err(e) => {
+                        error!("Error getting gCal event: {}", e);
+                        error_bit.store(true, std::sync::atomic::Ordering::Relaxed);
+                        None
+                    }
+                }
+            }
+        }
         match screen_content.lock() {
             Ok(mut content) => content.next_upcoming_event = event,
             Err(e) => error!("Poisoned lock when writing debts: {}", e),
