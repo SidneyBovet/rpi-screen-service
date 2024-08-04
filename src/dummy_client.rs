@@ -1,4 +1,5 @@
 use crate::config_extractor::api_config::ApiConfig;
+use chrono::{DateTime, Datelike, Local};
 use log::info;
 use screen_service::{screen_service_client::ScreenServiceClient, ScreenHashRequest};
 use screen_service::{ScreenContentReply, ScreenContentRequest};
@@ -59,7 +60,6 @@ fn start_hash_queries(api_config: &ApiConfig) -> JoinHandle<()> {
             let new_hash = make_hash_request(&mut client).await;
             if new_hash != hash {
                 hash = new_hash;
-                info!("Content changed, sending /GetScreenContent");
                 let content = make_full_request(&mut client).await;
                 content_pretty_print(content);
             }
@@ -71,11 +71,13 @@ fn content_pretty_print(content: ScreenContentReply) {
     // TODO: maybe handle all the unwraps
     // TODO: timestamps to local time
     // TODO: consider removing the time field, since we need now() anyway (or find a way around it)
+    let now = Local::now();
     info!("------------------");
     info!("[b:{}]", content.brightness);
     info!("[e:{}]", content.error);
     if let Some(time) = content.now {
         info!("{}:{}", time.hours, time.minutes);
+        info!("{}", now.format("%H:%M"));
     }
     if !content.kitty_debts.is_empty() {
         let debts = content
@@ -98,10 +100,19 @@ fn content_pretty_print(content: ScreenContentReply) {
             .bus_departures
             .iter()
             .map(|dep| {
+                let proto_ts = dep.departure_time.expect("Departure without a time");
+                let departure_time: DateTime<Local> = DateTime::from_timestamp(
+                    proto_ts.seconds,
+                    proto_ts.nanos.try_into().expect("Invalid TS nanos"),
+                )
+                .expect("Unable to convert departure proto TS into DateTime")
+                .into();
+                let departure_minutes_from_now =
+                    departure_time.signed_duration_since(now).num_minutes();
                 format!(
-                    "{}:{}",
+                    "{}:{}'",
                     dep.destination_enum().as_str_name().chars().next().unwrap(),
-                    dep.departure_time.unwrap().seconds
+                    departure_minutes_from_now
                 )
             })
             .collect::<Vec<String>>()
@@ -109,7 +120,19 @@ fn content_pretty_print(content: ScreenContentReply) {
         info!("{}", departures);
     }
     if let Some(event) = content.next_upcoming_event {
-        info!("{}-{}", event.event_start.unwrap().seconds, event.event_title);
+        let proto_ts = event.event_start.expect("Event without a time");
+        let departure_time: DateTime<Local> = DateTime::from_timestamp(
+            proto_ts.seconds,
+            proto_ts.nanos.try_into().expect("Invalid TS nanos"),
+        )
+        .expect("Unable to convert event proto TS into DateTime")
+        .into();
+        info!(
+            "{}.{}-{}",
+            departure_time.day(),
+            departure_time.month(),
+            event.event_title
+        );
     }
 }
 
