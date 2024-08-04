@@ -15,6 +15,7 @@ Client and server apps to run my LED panel from a Raspberry Pi, with another, mo
 - [ ] Test the gCal and transport updaters in Real mode
 - [ ] Get enough results that we have next to Flon, and next to Renens (could be 32 or 54)
 - [ ] Check out how to POST, and parse XML
+- [ ] Play with [sunrise / sunset API](https://sunrise-sunset.org/api) to have auto brightness
 
 ### To document
 
