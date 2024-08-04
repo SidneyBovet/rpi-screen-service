@@ -11,6 +11,10 @@ message Server {
     map<uint32, float> brightness_map = 3;
 }
 
+message Client {
+    google.protobuf.Duration update_period = 1;
+}
+
 message GoogleCalendarApi {
     google.protobuf.Duration update_period = 1;
     string ics_url = 2;
@@ -34,6 +38,7 @@ message TransportConfig {
 
 message ApiConfig {
     Server server = 1;
+    Client client = 5;
     GoogleCalendarApi gcal = 2;
     KittyConfig kitty = 3;
     TransportConfig transport = 4;

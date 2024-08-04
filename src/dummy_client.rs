@@ -46,6 +46,16 @@ fn start_one_shot(api_config: &ApiConfig) -> JoinHandle<()> {
 }
 
 fn start_hash_queries(api_config: &ApiConfig) -> JoinHandle<()> {
+    let update_interval = tokio::time::Duration::from_secs(
+        api_config
+            .client
+            .expect("No client config")
+            .update_period
+            .expect("No client update period")
+            .seconds
+            .try_into()
+            .expect("Invalid client update period"),
+    );
     let address = get_server_address(api_config);
     tokio::spawn(async move {
         // Let the server start up
@@ -53,7 +63,7 @@ fn start_hash_queries(api_config: &ApiConfig) -> JoinHandle<()> {
         let mut client = ScreenServiceClient::connect(address)
             .await
             .expect("Couldn't start dummy client");
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
+        let mut interval = tokio::time::interval(update_interval);
         let mut hash: u64 = 0;
         loop {
             interval.tick().await;
@@ -68,17 +78,14 @@ fn start_hash_queries(api_config: &ApiConfig) -> JoinHandle<()> {
 }
 
 fn content_pretty_print(content: ScreenContentReply) {
-    // TODO: maybe handle all the unwraps
-    // TODO: timestamps to local time
-    // TODO: consider removing the time field, since we need now() anyway (or find a way around it)
+    // TODO: handle all the unwraps
     let now = Local::now();
     info!("------------------");
     info!("[b:{}]", content.brightness);
     info!("[e:{}]", content.error);
-    if let Some(time) = content.now {
-        info!("{}:{}", time.hours, time.minutes);
-        info!("{}", now.format("%H:%M"));
-    }
+    // On the real client this will be updated every minute, not with incoming messages
+    // (otherwise we'd need to wait for e.g. a bus departure to have the minutes change)
+    info!("{}", now.format("%H:%M"));
     if !content.kitty_debts.is_empty() {
         let debts = content
             .kitty_debts

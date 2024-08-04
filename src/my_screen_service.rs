@@ -9,7 +9,7 @@ use crate::gcal_updater::GcalUpdater;
 use crate::kitty_updater::KittyUpdater;
 use crate::screen_service::screen_service_server::ScreenService;
 use crate::screen_service::{
-    ScreenContentReply, ScreenContentRequest, ScreenHashReply, ScreenHashRequest, Time,
+    ScreenContentReply, ScreenContentRequest, ScreenHashReply, ScreenHashRequest,
 };
 use crate::transport_updater::TransportUpdater;
 use chrono::Timelike;
@@ -110,13 +110,8 @@ impl MyScreenService {
 
         {
             let mut content = content.lock()?;
-            // Update the time, in case minutes have changed since our last hash
-            let now = chrono::offset::Local::now();
-            content.now = Some(Time {
-                hours: now.hour(),
-                minutes: now.minute(),
-            });
             // Update the brightness according to now
+            let now = chrono::offset::Local::now();
             content.brightness = self.get_brightness(now.hour()).unwrap_or(1.0);
             // Update the error bit
             content.error = self

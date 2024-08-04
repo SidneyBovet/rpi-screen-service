@@ -19,19 +19,12 @@ message ScreenContentRequest {
 }
 
 message ScreenContentReply {
-    Time now = 1;
+    //Time now = 1;  // Note: the receiving end will need to convert UTC timestamps anyway, so let it figure out the current time
     float brightness = 2;
     repeated KittyDebt kitty_debts = 3;
     repeated Departure bus_departures = 4;
     CalendarEvent next_upcoming_event = 5;
     bool error = 6;
-}
-
-// The current time for the server, with minute precision
-// Note: this is not a timestamp to avoid constant changes + timezone issues
-message Time {
-    uint32 hours = 1;
-    uint32 minutes = 2;
 }
 
 // A debt as represented by our KittySplit
