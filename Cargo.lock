@@ -225,6 +225,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "az"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b7e4c2464d97fe331d41de9d5db0def0a96f4d823b8b32a2efd503578988973"
+
+[[package]]
 name = "backtrace"
 version = "0.3.73"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -395,6 +401,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b6a852b24ab71dffc585bcb46eaf7959d175cb865a7152e35b348d1b2960422"
 
 [[package]]
+name = "copy_dir"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "543d1dd138ef086e2ff05e3a48cf9da045da2033d16f8538fd76b86cd49b2ca3"
+dependencies = [
+ "walkdir",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -554,6 +569,16 @@ name = "either"
 version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3dca9240753cf90908d7e4aac30f630662b02aebaa1b58a3cadabdb23385b58b"
+
+[[package]]
+name = "embedded-graphics-core"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8b1239db5f3eeb7e33e35bd10bd014e7b2537b17e071f726a09351431337cfa"
+dependencies = [
+ "az",
+ "byteorder",
+]
 
 [[package]]
 name = "encoding_rs"
@@ -1786,6 +1811,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "rpi-led-matrix"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dad33d57f9596dd7778b97c962d2b61f12f0a7ba9e6687e97660cbdeabc5b670"
+dependencies = [
+ "embedded-graphics-core",
+ "libc",
+ "rpi-led-matrix-sys",
+]
+
+[[package]]
+name = "rpi-led-matrix-sys"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c8a1a28f8e8825eb093134821795c2f48954e207f46715225828af9d2fc9008"
+dependencies = [
+ "copy_dir",
+ "libc",
+]
+
+[[package]]
 name = "rpi-screen-service"
 version = "0.1.0"
 dependencies = [
@@ -1803,6 +1849,7 @@ dependencies = [
  "prost-types",
  "quick-xml",
  "reqwest",
+ "rpi-led-matrix",
  "scraper",
  "serde",
  "serde_json",
