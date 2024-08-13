@@ -46,6 +46,7 @@ fn start_one_shot(api_config: &ApiConfig) -> JoinHandle<()> {
 }
 
 fn start_hash_queries(api_config: &ApiConfig) -> JoinHandle<()> {
+    info!("start hash");
     let update_interval = tokio::time::Duration::from_secs(
         api_config
             .client
@@ -56,18 +57,25 @@ fn start_hash_queries(api_config: &ApiConfig) -> JoinHandle<()> {
             .try_into()
             .expect("Invalid client update period"),
     );
+    info!("update: {:?}", update_interval);
     let address = get_server_address(api_config);
+    info!("addr: {:?}", address);
     tokio::spawn(async move {
         // Let the server start up
+        info!("spawned");
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        info!("slept");
         let mut client = ScreenServiceClient::connect(address)
             .await
             .expect("Couldn't start dummy client");
         let mut interval = tokio::time::interval(update_interval);
         let mut hash: u64 = 0;
         loop {
+            info!("looping");
             interval.tick().await;
+            info!("intervalled");
             let new_hash = make_hash_request(&mut client).await;
+            info!("new hash: {}", new_hash);
             if new_hash != hash {
                 hash = new_hash;
                 let content = make_full_request(&mut client).await;

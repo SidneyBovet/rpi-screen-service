@@ -29,7 +29,9 @@ pbjson = "0.7"
 pbjson-types = "0.7"
 quick-xml = { version = "0.36", optional = true }
 reqwest = { version = "0.12", optional = true }
-rpi-led-matrix = { version = "0.4.0", optional = true }
+#rpi-led-matrix = { version = "0.4", optional = true }
+rpi-led-matrix = { git = "https://github.com/rust-rpi-led-matrix/rust-rpi-rgb-led-matrix", branch = "main", features = ["args", "embeddedgraphics"], optional = true }
+embedded-graphics = { version = "0.8", optional = true }
 scraper = { version = "0.19", optional = true }
 serde = "1.0"
 serde_json = "1.0"
@@ -44,7 +46,12 @@ server = [
     "scraper",
     "log4rs/rolling_file_appender",
 ]
-raspi = ["rpi-led-matrix"]
+raspi = [
+    "rpi-led-matrix",
+#    "rpi-led-matrix/args",
+#    "rpi-led-matrix/embeddedgraphics",
+    "embedded-graphics",
+]
 
 [build-dependencies]
 prost-build = "0.13"
