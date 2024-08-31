@@ -30,15 +30,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut screen_service = my_screen_service::MyScreenService::new(&config);
     screen_service.start_backgound_updates();
 
-    // Start the actual serving (always from localhost; the config is for clients)
+    // Start the actual serving, always from localhost ('[::1]' or '127.0.0.1' or '0.0.0.0')
+    // (The address in the config is for clients)
     let server_config = config.server.as_ref().expect("No server config found");
-    let address = format!("[::1]:{}", server_config.port)
+    let address = format!("127.0.0.1:{}", server_config.port)
         .parse()
         .expect("Couldn't parse the config port to an address");
     Server::builder()
         .add_service(ScreenServiceServer::new(screen_service))
         .serve(address)
-        .await?;
+        .await
+        .expect("Error while starting or executing the server");
 
     Ok(())
 }
