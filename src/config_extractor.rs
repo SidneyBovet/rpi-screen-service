@@ -9,6 +9,7 @@ pub mod api_config {
 use crate::config_extractor::api_config::ApiConfig;
 use clap::ArgMatches;
 use clap::{Arg, Command};
+use log::info;
 use std::{fs::File, io::BufReader, path::PathBuf};
 
 pub fn cli() -> Command {
@@ -23,6 +24,13 @@ pub fn cli() -> Command {
                 .long("config")
                 .value_parser(clap::value_parser!(std::path::PathBuf))
                 .help("Path to a JSON config file with API codes"),
+        )
+        .arg(
+            Arg::new("log_cfg")
+            .short('l')
+            .long("log_cfg")
+            .value_parser(clap::value_parser!(std::path::PathBuf))
+            .help("Path to a log4rs YML file to set up logging")
         )
         .arg(
             Arg::new("dummy_client")
@@ -43,4 +51,14 @@ pub fn extract_config(matches: &ArgMatches) -> Result<ApiConfig, Box<dyn std::er
     let api_config: ApiConfig = serde_json::from_reader(reader)?;
 
     Ok(api_config)
+}
+
+// This is used only in the server binary, so will issue an analyzer warning
+#[allow(dead_code)]
+pub fn init_logging(matches: &ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
+    let path: &PathBuf = matches.get_one("log_cfg").ok_or("Missing log config path argument")?;
+    log4rs::init_file(path, Default::default())?;
+    info!("Server started");
+
+    Ok(())
 }
