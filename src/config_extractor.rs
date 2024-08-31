@@ -58,7 +58,7 @@ pub fn extract_config(matches: &ArgMatches) -> Result<ApiConfig, Box<dyn std::er
 pub fn init_logging(matches: &ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
     let path: &PathBuf = matches.get_one("log_cfg").ok_or("Missing log config path argument")?;
     log4rs::init_file(path, Default::default())?;
-    info!("Server started");
+    info!("Server logging started");
 
     Ok(())
 }
