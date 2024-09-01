@@ -100,7 +100,7 @@ impl MyScreenService {
         });
     }
 
-    // Computes the hash of the content proto **after updating its time field**
+    // Computes the hash of the content proto **after updating its brightness and error fields**
     fn get_hash<'a>(
         &'a self,
         content: &'a Arc<Mutex<ScreenContentReply>>,
@@ -142,7 +142,7 @@ impl MyScreenService {
 fn get_brightness_impl(brightness_map: &HashMap<u32, f32>, hour: u32) -> Option<f32> {
     let (mut best_hour, mut best_brightness) = (None, None);
     for (h, b) in brightness_map {
-        if h <= &hour && h > &best_hour.unwrap_or(u32::MIN) {
+        if h <= &hour && h >= &best_hour.unwrap_or(u32::MIN) {
             best_hour = Some(*h);
             best_brightness = Some(*b);
         }
@@ -194,6 +194,7 @@ mod tests {
 
     #[test]
     fn computes_brightness() {
+        // From midnight b=0, from 2 b=0.5, from 3 b=0.8, and from noon b=1
         let map = HashMap::from([(0, 0.0), (2, 0.5), (3, 0.8), (12, 1.0)]);
 
         assert_eq!(get_brightness_impl(&map, 0), Some(0.0));
@@ -202,5 +203,6 @@ mod tests {
         assert_eq!(get_brightness_impl(&map, 5), Some(0.8));
         assert_eq!(get_brightness_impl(&map, 11), Some(0.8));
         assert_eq!(get_brightness_impl(&map, 12), Some(1.0));
+        assert_eq!(get_brightness_impl(&map, 14), Some(1.0));
     }
 }
