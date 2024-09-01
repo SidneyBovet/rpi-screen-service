@@ -16,6 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .file_descriptor_set_path(&descriptor_path)
         // Override prost-types with pbjson-types
         .compile_well_known_types()
+        .protoc_arg("--experimental_allow_proto3_optional")
         .extern_path(".google.protobuf", "::pbjson_types")
         // Generate prost structs
         .compile_protos(&proto_files, &[root])?;

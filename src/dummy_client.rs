@@ -1,10 +1,12 @@
 use crate::config_extractor::api_config::ApiConfig;
 use chrono::{DateTime, Datelike, Local};
-use log::info;
-use screen_service::{screen_service_client::ScreenServiceClient, ScreenHashRequest};
-use screen_service::{ScreenContentReply, ScreenContentRequest};
+use log::{debug, info};
+use screen_service::{
+    screen_service_client::ScreenServiceClient, ScreenContentReply, ScreenContentRequest,
+    ScreenHashRequest,
+};
 use tokio::task::JoinHandle;
-use tonic::transport::{Channel, Endpoint};
+use tonic::transport::Channel;
 
 pub mod screen_service {
     tonic::include_proto!("screen_service"); // The string specified here must match the proto package name
@@ -27,7 +29,7 @@ pub fn start(mode: ClientMode, api_config: &ApiConfig) -> JoinHandle<()> {
 }
 
 fn start_one_shot(api_config: &ApiConfig) -> JoinHandle<()> {
-    let address = get_server_address(api_config);
+    let address = crate::config_extractor::get_server_address(api_config);
     tokio::spawn(async move {
         // Let the server start up
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -46,10 +48,10 @@ fn start_one_shot(api_config: &ApiConfig) -> JoinHandle<()> {
 }
 
 fn start_hash_queries(api_config: &ApiConfig) -> JoinHandle<()> {
-    info!("start hash");
     let update_interval = tokio::time::Duration::from_secs(
         api_config
             .client
+            .as_ref()
             .expect("No client config")
             .update_period
             .expect("No client update period")
@@ -57,25 +59,20 @@ fn start_hash_queries(api_config: &ApiConfig) -> JoinHandle<()> {
             .try_into()
             .expect("Invalid client update period"),
     );
-    info!("update: {:?}", update_interval);
-    let address = get_server_address(api_config);
-    info!("addr: {:?}", address);
+    debug!("update interval: {:?}", update_interval);
+    let address = crate::config_extractor::get_server_address(api_config);
+    debug!("address: {:?}", address);
     tokio::spawn(async move {
         // Let the server start up
-        info!("spawned");
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-        info!("slept");
         let mut client = ScreenServiceClient::connect(address)
             .await
             .expect("Couldn't start dummy client");
         let mut interval = tokio::time::interval(update_interval);
         let mut hash: u64 = 0;
         loop {
-            info!("looping");
             interval.tick().await;
-            info!("intervalled");
             let new_hash = make_hash_request(&mut client).await;
-            info!("new hash: {}", new_hash);
             if new_hash != hash {
                 hash = new_hash;
                 let content = make_full_request(&mut client).await;
@@ -149,13 +146,6 @@ fn content_pretty_print(content: ScreenContentReply) {
             event.event_title
         );
     }
-}
-
-fn get_server_address(api_config: &ApiConfig) -> Endpoint {
-    let server_config = api_config.server.as_ref().expect("No server config found");
-    format!("http://{}:{}", server_config.address, server_config.port)
-        .parse()
-        .expect("Couldn't parse server config into an address")
 }
 
 async fn make_hash_request(client: &mut ScreenServiceClient<Channel>) -> u64 {

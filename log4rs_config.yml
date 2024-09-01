@@ -33,7 +33,7 @@ appenders:
 
 # Set the default logging level to "warn" and attach the "stdout" appender to the root
 root:
-  level: debug
+  level: info
   appenders:
     - stdout
     - file_sink

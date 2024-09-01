@@ -13,6 +13,41 @@ message Server {
 
 message Client {
     google.protobuf.Duration update_period = 1;
+
+    LedMatrixOptions matrix_options = 2;
+    LedRuntimeOptions runtime_options = 3;
+}
+
+// To construct the matrix options, from
+// https://github.com/rust-rpi-led-matrix/rust-rpi-rgb-led-matrix/blob/main/rpi-led-matrix-sys/src/lib.rs#L39
+message LedMatrixOptions {
+    // Some fields are optional because their absence should result in a different default
+    // (and prost doesn't support [default = ...] annotations AFAICT)
+    optional string hardware_mapping = 1;
+    optional uint32 rows = 2;
+    optional uint32 cols = 3;
+    optional uint32 chain_length = 4;
+    optional uint32 parallel = 5;
+    optional uint32 pwm_bits = 6;
+    optional uint32 pwm_lsb_nanoseconds = 7;
+    uint32 pwm_dither_bits = 8;
+    optional uint32 brightness = 9;
+    uint32 scan_mode = 10;
+    uint32 row_address_type = 11;
+    uint32 multiplexing = 12;
+    optional string led_rgb_sequence = 13;
+    string pixel_mapper_config = 14;
+    string panel_type = 15;
+    bool disable_hardware_pulsing = 16;
+    bool show_refresh_rate = 17;
+    bool inverse_colors = 18;
+    uint32 limit_refresh_rate_hz = 19;
+}
+
+message LedRuntimeOptions {
+    optional uint32 gpio_slowdown = 1;
+    bool daemon = 2;
+    bool no_drop_privileges = 3;
 }
 
 message GoogleCalendarApi {

@@ -10,6 +10,7 @@ use crate::config_extractor::api_config::ApiConfig;
 use clap::ArgMatches;
 use clap::{Arg, Command};
 use log::info;
+use tonic::transport::Endpoint;
 use std::{fs::File, io::BufReader, path::PathBuf};
 
 pub fn cli() -> Command {
@@ -58,7 +59,14 @@ pub fn extract_config(matches: &ArgMatches) -> Result<ApiConfig, Box<dyn std::er
 pub fn init_logging(matches: &ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
     let path: &PathBuf = matches.get_one("log_cfg").ok_or("Missing log config path argument")?;
     log4rs::init_file(path, Default::default())?;
-    info!("Server logging started");
+    info!("Logging started");
 
     Ok(())
+}
+
+pub fn get_server_address(api_config: &ApiConfig) -> Endpoint {
+    let server_config = api_config.server.as_ref().expect("No server config found");
+    format!("http://{}:{}", server_config.address, server_config.port)
+        .parse()
+        .expect("Couldn't parse server config into an address")
 }
