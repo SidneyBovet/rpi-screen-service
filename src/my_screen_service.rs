@@ -35,9 +35,9 @@ impl MyScreenService {
 
     pub fn start_backgound_updates(&mut self) {
         // Start the updaters in dummy mode, to avoid spamming the server if we got something wrong
-        self.start_kitty_updates(crate::kitty_updater::KittyUpdateMode::Dummy);
-        self.start_gcal_updates(crate::gcal_updater::GcalUpdateMode::Dummy);
-        self.start_transport_updates(crate::transport_updater::TransportUpdateMode::Dummy);
+        self.start_kitty_updates(crate::kitty_updater::KittyUpdateMode::Real);
+        self.start_gcal_updates(crate::gcal_updater::GcalUpdateMode::Real);
+        self.start_transport_updates(crate::transport_updater::TransportUpdateMode::Real);
     }
 
     fn start_kitty_updates(&mut self, update_mode: crate::kitty_updater::KittyUpdateMode) {
