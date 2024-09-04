@@ -15,27 +15,43 @@ path = "src/cli_client.rs"
 [[bin]] # Bin to run the actual Raspi client
 name = "screen-rpi-client"
 path = "src/rpi_client.rs"
+required-features = ["rpi-led-matrix"]
 
 [dependencies]
 chrono = "0.4"
 clap = "4.5"
-icalendar ={ version = "0.16", optional = true}
+icalendar = { version = "0.16", optional = true }
 log = "0.4"
 log4rs = "1.3"
 prost = "0.13"
 prost-types = "0.13"
 pbjson = "0.7"
 pbjson-types = "0.7"
-quick-xml ={ version = "0.36", optional = true}
-reqwest = {version = "0.12", optional = true}
-scraper = {version = "0.19", optional = true}
+quick-xml = { version = "0.36", optional = true }
+reqwest = { version = "0.12", optional = true }
+#rpi-led-matrix = { version = "0.4", optional = true }
+rpi-led-matrix = { git = "https://github.com/rust-rpi-led-matrix/rust-rpi-rgb-led-matrix", branch = "main", features = ["args", "embeddedgraphics"], optional = true }
+embedded-graphics = { version = "0.8", optional = true }
+scraper = { version = "0.19", optional = true }
 serde = "1.0"
 serde_json = "1.0"
 tonic = "0.12"
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 
 [features]
-server = ["icalendar", "quick-xml", "dep:reqwest", "dep:scraper", "log4rs/rolling_file_appender"]
+server = [
+    "icalendar",
+    "quick-xml",
+    "reqwest",
+    "scraper",
+    "log4rs/rolling_file_appender",
+]
+raspi = [
+    "rpi-led-matrix",
+#    "rpi-led-matrix/args",
+#    "rpi-led-matrix/embeddedgraphics",
+    "embedded-graphics",
+]
 
 [build-dependencies]
 prost-build = "0.13"
