@@ -15,7 +15,7 @@ use embedded_graphics::{
     prelude::*,
     text::Text,
 };
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use rpi_led_matrix::{LedCanvas, LedMatrix, LedMatrixOptions, LedRuntimeOptions};
 use screen_service::{
     screen_service_client::ScreenServiceClient, ScreenContentReply, ScreenContentRequest,
@@ -166,6 +166,7 @@ async fn make_full_request(client: &mut ScreenServiceClient<Channel>) -> ScreenC
 fn print_error_bit(canvas: &mut LedCanvas) {
     Text::new(".", Point::new(30, 30), err_style(0.1))
         .draw(canvas)
+        .inspect_err(|e| error!("Can't even print the error bit: {:?}\nI'm giving up.", e))
         .expect("Can't even print the error bit, I'm giving up.");
 }
 
@@ -196,11 +197,19 @@ fn draw_content_onto_canvas(
                 debt.who
                     .chars()
                     .next()
-                    .expect("No first char on debt's who"),
+                    .or_else(|| {
+                        error!("No first char in debt's who");
+                        Some('?')
+                    })
+                    .unwrap(),
                 debt.whom
                     .chars()
                     .next()
-                    .expect("No first char on debt's whom"),
+                    .or_else(|| {
+                        error!("No first char in debt's whom");
+                        Some('?')
+                    })
+                    .unwrap(),
                 debt.how_much as i32
             )
         })
@@ -218,12 +227,18 @@ fn draw_content_onto_canvas(
         .bus_departures
         .iter()
         .map(|dep| {
-            let proto_ts = dep.departure_time.expect("Departure without a time");
+            let proto_ts = dep
+                .departure_time
+                .or_else(|| {
+                    error!("Departure without a time");
+                    Some(prost_types::Timestamp::date(2000, 01, 01)?)
+                })
+                .unwrap();
             let departure_time: DateTime<Local> = DateTime::from_timestamp(
                 proto_ts.seconds,
                 proto_ts.nanos.try_into().expect("Invalid TS nanos"),
             )
-            .expect("Unable to convert departure proto TS into DateTime")
+            .ok_or("Unable to convert departure proto TS into DateTime")?
             .into();
             let departure_minutes_from_now =
                 departure_time.signed_duration_since(now).num_minutes();
@@ -233,7 +248,11 @@ fn draw_content_onto_canvas(
                     .as_str_name()
                     .chars()
                     .next()
-                    .expect("No first char on departure"),
+                    .or_else(|| {
+                        error!("No first char in departure");
+                        Some('?')
+                    })
+                    .unwrap(),
                 departure_minutes_from_now
             )
         })
@@ -243,12 +262,18 @@ fn draw_content_onto_canvas(
 
     //let cal_text = "23.10: Escape game";
     if let Some(event) = &content.next_upcoming_event {
-        let proto_ts = event.event_start.expect("Event without a time");
+        let proto_ts = event
+            .event_start
+            .or_else(|| {
+                error!("Event without a time");
+                Some(prost_types::Timestamp::date(2000, 01, 01)?)
+            })
+            .unwrap();
         let event_time: DateTime<Local> = DateTime::from_timestamp(
             proto_ts.seconds,
             proto_ts.nanos.try_into().expect("Invalid TS nanos"),
         )
-        .expect("Unable to convert event proto TS into DateTime")
+        .ok_or("Unable to convert event proto TS into DateTime")?
         .into();
         let cal_text = format!(
             "{}.{}: {}",
@@ -310,7 +335,6 @@ async fn main() {
                 warn!("Error drawing things on the canvas: {}", e);
                 print_error_bit(&mut canvas);
             });
-            // TODO: use brightness and error bit
             canvas = matrix.swap(canvas);
         }
     }

@@ -1,6 +1,6 @@
 use crate::config_extractor::api_config::ApiConfig;
-use chrono::{DateTime, Datelike, Local};
-use log::{debug, info};
+use chrono::{DateTime, Datelike, Local, Timelike};
+use log::{debug, error, info};
 use screen_service::{
     screen_service_client::ScreenServiceClient, ScreenContentReply, ScreenContentRequest,
     ScreenHashRequest,
@@ -70,11 +70,13 @@ fn start_hash_queries(api_config: &ApiConfig) -> JoinHandle<()> {
             .expect("Couldn't start dummy client");
         let mut interval = tokio::time::interval(update_interval);
         let mut hash: u64 = 0;
+        let mut minutes: u32 = Local::now().minute();
         loop {
             interval.tick().await;
             let new_hash = make_hash_request(&mut client).await;
-            if new_hash != hash {
+            if hash != new_hash || minutes != Local::now().minute() {
                 hash = new_hash;
+                minutes = Local::now().minute();
                 let content = make_full_request(&mut client).await;
                 content_pretty_print(content);
             }
@@ -98,8 +100,22 @@ fn content_pretty_print(content: ScreenContentReply) {
             .map(|debt| {
                 format!(
                     "{}>{}:{}",
-                    debt.who.chars().next().unwrap(),
-                    debt.whom.chars().next().unwrap(),
+                    debt.who
+                        .chars()
+                        .next()
+                        .or_else(|| {
+                            error!("No first char in debt's who");
+                            Some('?')
+                        })
+                        .unwrap(),
+                    debt.whom
+                        .chars()
+                        .next()
+                        .or_else(|| {
+                            error!("No first char in debt's who");
+                            Some('?')
+                        })
+                        .unwrap(),
                     debt.how_much as i32
                 )
             })
@@ -112,11 +128,21 @@ fn content_pretty_print(content: ScreenContentReply) {
             .bus_departures
             .iter()
             .map(|dep| {
-                let proto_ts = dep.departure_time.expect("Departure without a time");
+                let proto_ts = dep
+                    .departure_time
+                    .or_else(|| {
+                        error!("Departure without a time");
+                        Some(
+                            prost_types::Timestamp::date(2000, 01, 01)
+                                .expect("Can't even make a hardcoded proto"),
+                        )
+                    })
+                    .unwrap();
                 let departure_time: DateTime<Local> = DateTime::from_timestamp(
                     proto_ts.seconds,
                     proto_ts.nanos.try_into().expect("Invalid TS nanos"),
                 )
+                .ok_or("Unable to convert departure proto TS into DateTime")
                 .expect("Unable to convert departure proto TS into DateTime")
                 .into();
                 let departure_minutes_from_now =
@@ -132,7 +158,16 @@ fn content_pretty_print(content: ScreenContentReply) {
         info!("{}", departures);
     }
     if let Some(event) = content.next_upcoming_event {
-        let proto_ts = event.event_start.expect("Event without a time");
+        let proto_ts = event
+            .event_start
+            .or_else(|| {
+                error!("Event without a time");
+                Some(
+                    prost_types::Timestamp::date(2000, 01, 01)
+                        .expect("Can't even make a hardcoded proto"),
+                )
+            })
+            .unwrap();
         let departure_time: DateTime<Local> = DateTime::from_timestamp(
             proto_ts.seconds,
             proto_ts.nanos.try_into().expect("Invalid TS nanos"),
