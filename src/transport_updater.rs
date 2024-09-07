@@ -132,7 +132,7 @@ impl TransportUpdater {
         });
         match self.get_duration_to_next_departure(departures.first(), Duration::from_secs(1)) {
             Ok(next_update) => {
-                info!(
+                debug!(
                     "Next departure is {:?}, will update again at {:?}",
                     departures.first(),
                     next_update
@@ -162,7 +162,7 @@ impl TransportUpdater {
         let now_utc_sec = chrono::offset::Utc::now().timestamp();
 
         if departure_utc_sec - now_utc_sec < 0 && departure_utc_sec - now_utc_sec > -60 {
-            info!("Supposed next departure is ~now; retying in one minute");
+            debug!("Supposed next departure is ~now; retying in one minute");
             return Ok(Instant::now() + Duration::from_secs(60));
         }
 
