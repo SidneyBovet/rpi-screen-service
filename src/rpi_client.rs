@@ -164,7 +164,7 @@ async fn make_full_request(client: &mut ScreenServiceClient<Channel>) -> ScreenC
 }
 
 fn print_error_bit(canvas: &mut LedCanvas) {
-    Text::new(".", Point::new(30, 30), err_style(0.1))
+    Text::new(".", Point::new(0, 0), err_style(0.5))
         .draw(canvas)
         .inspect_err(|e| error!("Can't even print the error bit: {:?}\nI'm giving up.", e))
         .expect("Can't even print the error bit, I'm giving up.");
