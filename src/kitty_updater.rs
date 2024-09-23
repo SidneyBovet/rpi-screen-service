@@ -8,6 +8,8 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use tokio::time::{Duration, Instant};
 
+static REFRESH_PERIOD_ON_ERRORS: Duration = Duration::from_secs(600);
+
 #[derive(Debug)]
 // We switch from one to the other for manual testing, but it's actually fine to keep both.
 #[allow(dead_code)]
@@ -21,6 +23,7 @@ pub struct KittyUpdater {
     update_mode: KittyUpdateMode,
     client: Client,
     kitty_url: String,
+    kitty_period_config: Duration,
     kitty_period: Duration,
 }
 
@@ -58,11 +61,14 @@ impl DataUpdater for KittyUpdater {
                     Ok(returned_debts) => {
                         // Make sure the server knows there are no errors
                         error_bit.store(false, std::sync::atomic::Ordering::Relaxed);
+                        // And potentially resume normal update cadence
+                        self.kitty_period = self.kitty_period_config;
                         returned_debts
                     }
                     Err(e) => {
                         error!("Error getting Kitty debts: {}", e);
                         error_bit.store(true, std::sync::atomic::Ordering::Relaxed);
+                        self.kitty_period = REFRESH_PERIOD_ON_ERRORS;
                         vec![]
                     }
                 }
@@ -84,7 +90,7 @@ impl KittyUpdater {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let kitty_config = config.kitty.as_ref().ok_or("No kitty config")?;
         let kitty_url = kitty_config.url.clone();
-        let kitty_period = Duration::from_secs(
+        let kitty_period_config = Duration::from_secs(
             kitty_config
                 .update_period
                 .as_ref()
@@ -92,10 +98,12 @@ impl KittyUpdater {
                 .seconds
                 .try_into()?,
         );
+        let kitty_period = kitty_period_config;
         Ok(KittyUpdater {
             update_mode,
             client: Client::new(),
             kitty_url,
+            kitty_period_config,
             kitty_period,
         })
     }
