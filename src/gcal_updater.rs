@@ -9,6 +9,8 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use tokio::time::{Duration, Instant};
 
+static REFRESH_PERIOD_ON_ERRORS: Duration = Duration::from_secs(600);
+
 #[derive(Debug)]
 // We switch from one to the other for manual testing, but it's actually fine to keep both.
 #[allow(dead_code)]
@@ -22,6 +24,7 @@ pub struct GcalUpdater {
     update_mode: GcalUpdateMode,
     client: Client,
     ics_url: String,
+    gcal_period_config: Duration,
     gcal_period: Duration,
 }
 
@@ -55,11 +58,14 @@ impl DataUpdater for GcalUpdater {
                     Ok(returned_event) => {
                         // Make sure the server knows there are no errors
                         error_bit.store(false, std::sync::atomic::Ordering::Relaxed);
+                        // And potentially resume normal update cadence
+                        self.gcal_period = self.gcal_period_config;
                         returned_event
                     }
                     Err(e) => {
                         error!("Error getting gCal event: {}", e);
                         error_bit.store(true, std::sync::atomic::Ordering::Relaxed);
+                        self.gcal_period = REFRESH_PERIOD_ON_ERRORS;
                         None
                     }
                 }
@@ -79,7 +85,7 @@ impl GcalUpdater {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let gcal_config = config.gcal.as_ref().ok_or("No gCal config")?;
         let ics_url = gcal_config.ics_url.clone();
-        let gcal_period = Duration::from_secs(
+        let gcal_period_config = Duration::from_secs(
             gcal_config
                 .update_period
                 .as_ref()
@@ -87,10 +93,12 @@ impl GcalUpdater {
                 .seconds
                 .try_into()?,
         );
+        let gcal_period = gcal_period_config;
         Ok(GcalUpdater {
             update_mode,
             client: Client::new(),
             ics_url,
+            gcal_period_config,
             gcal_period,
         })
     }
