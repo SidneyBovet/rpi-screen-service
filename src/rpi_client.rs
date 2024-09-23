@@ -231,14 +231,18 @@ fn draw_content_onto_canvas(
                 .departure_time
                 .or_else(|| {
                     error!("Departure without a time");
-                    Some(prost_types::Timestamp::date(2000, 01, 01)?)
+                    Some(
+                        prost_types::Timestamp::date(2000, 01, 01)
+                            .expect("Can't even make a hardcoded proto"),
+                    )
                 })
                 .unwrap();
             let departure_time: DateTime<Local> = DateTime::from_timestamp(
                 proto_ts.seconds,
                 proto_ts.nanos.try_into().expect("Invalid TS nanos"),
             )
-            .ok_or("Unable to convert departure proto TS into DateTime")?
+            // We can't use `?` here because the function (we're in the lambda) doesn't return a Result
+            .expect("Unable to convert departure proto TS into DateTime")
             .into();
             let departure_minutes_from_now =
                 departure_time.signed_duration_since(now).num_minutes();
@@ -266,7 +270,10 @@ fn draw_content_onto_canvas(
             .event_start
             .or_else(|| {
                 error!("Event without a time");
-                Some(prost_types::Timestamp::date(2000, 01, 01)?)
+                Some(
+                    prost_types::Timestamp::date(2000, 01, 01)
+                        .expect("Can't even make a hardcoded proto"),
+                )
             })
             .unwrap();
         let event_time: DateTime<Local> = DateTime::from_timestamp(

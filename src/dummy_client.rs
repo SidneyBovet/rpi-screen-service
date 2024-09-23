@@ -78,13 +78,13 @@ fn start_hash_queries(api_config: &ApiConfig) -> JoinHandle<()> {
                 hash = new_hash;
                 minutes = Local::now().minute();
                 let content = make_full_request(&mut client).await;
-                content_pretty_print(content);
+                content_pretty_print(content).expect("Couldn't pretty print");
             }
         }
     })
 }
 
-fn content_pretty_print(content: ScreenContentReply) {
+fn content_pretty_print(content: ScreenContentReply) -> Result<(), Box<dyn std::error::Error>> {
     // TODO: handle all the unwraps
     let now = Local::now();
     info!("------------------");
@@ -142,7 +142,7 @@ fn content_pretty_print(content: ScreenContentReply) {
                     proto_ts.seconds,
                     proto_ts.nanos.try_into().expect("Invalid TS nanos"),
                 )
-                .ok_or("Unable to convert departure proto TS into DateTime")
+                // We can't use `?` here because the function (we're in the lambda) doesn't return a Result
                 .expect("Unable to convert departure proto TS into DateTime")
                 .into();
                 let departure_minutes_from_now =
@@ -168,19 +168,21 @@ fn content_pretty_print(content: ScreenContentReply) {
                 )
             })
             .unwrap();
-        let departure_time: DateTime<Local> = DateTime::from_timestamp(
+        let event_time: DateTime<Local> = DateTime::from_timestamp(
             proto_ts.seconds,
             proto_ts.nanos.try_into().expect("Invalid TS nanos"),
         )
-        .expect("Unable to convert event proto TS into DateTime")
+        .ok_or("Unable to convert event proto TS into DateTime")?
         .into();
         info!(
             "{}.{}-{}",
-            departure_time.day(),
-            departure_time.month(),
+            event_time.day(),
+            event_time.month(),
             event.event_title
         );
     }
+
+    Ok(())
 }
 
 async fn make_hash_request(client: &mut ScreenServiceClient<Channel>) -> u64 {
