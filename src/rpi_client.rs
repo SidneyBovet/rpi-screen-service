@@ -305,7 +305,7 @@ async fn main() {
     let api_config = extract_config(&matches).expect("Error reading config");
 
     let address = crate::config_extractor::get_server_address(&api_config);
-    info!("address: {:?}", address);
+    info!("address: {:?}", address.uri());
     let mut client = ScreenServiceClient::connect(address)
         .await
         .expect("Couldn't start raspi client");
