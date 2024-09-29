@@ -223,8 +223,8 @@ fn draw_content_onto_canvas(
     .draw(canvas)?;
 
     //let bus_text = "18:12'\n32: 7'";
-    let mut departures = content.bus_departures;
     // Sort the departures, so at least when all present they show on the same line
+    let mut departures = content.bus_departures.clone();
     departures.sort_by_key(|departure| departure.destination_enum().as_str_name());
     let bus_text = departures
         .iter()
@@ -246,7 +246,7 @@ fn draw_content_onto_canvas(
             // We can't use `?` here because the function (we're in the lambda) doesn't return a Result
             .expect("Unable to convert departure proto TS into DateTime")
             .into();
-            let departure_minutes_from_now =
+            let mut departure_minutes_from_now =
                 departure_time.signed_duration_since(now).num_minutes();
             if departure_minutes_from_now < 0 {
                 warn!(
