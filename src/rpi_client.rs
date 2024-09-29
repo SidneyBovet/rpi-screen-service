@@ -223,8 +223,10 @@ fn draw_content_onto_canvas(
     .draw(canvas)?;
 
     //let bus_text = "18:12'\n32: 7'";
-    let bus_text = content
-        .bus_departures
+    let mut departures = content.bus_departures;
+    // Sort the departures, so at least when all present they show on the same line
+    departures.sort_by_key(|departure| departure.destination_enum().as_str_name());
+    let bus_text = departures
         .iter()
         .map(|dep| {
             let proto_ts = dep
