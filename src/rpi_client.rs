@@ -246,6 +246,14 @@ fn draw_content_onto_canvas(
             .into();
             let departure_minutes_from_now =
                 departure_time.signed_duration_since(now).num_minutes();
+            if departure_minutes_from_now < 0 {
+                warn!(
+                    "Got a departure {} minutes in the past, clamping to 0",
+                    departure_minutes_from_now
+                );
+                departure_minutes_from_now = 0;
+                print_error_bit(canvas);
+            }
             format!(
                 "{}:{}'",
                 dep.destination_enum()
