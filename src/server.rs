@@ -5,6 +5,7 @@ mod gcal_updater;
 mod kitty_updater;
 mod my_screen_service;
 mod transport_updater;
+mod exponential_backoff;
 
 use log::debug;
 use screen_service::screen_service_server::ScreenServiceServer;

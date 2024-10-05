@@ -1,3 +1,4 @@
+use crate::exponential_backoff::ExponentialBackoff;
 use crate::screen_service::{KittyDebt, ScreenContentReply};
 use crate::{config_extractor::api_config, data_updater::DataUpdater};
 use chrono::Timelike;
@@ -7,8 +8,6 @@ use scraper::{ElementRef, Html, Selector};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use tokio::time::{Duration, Instant};
-
-static REFRESH_PERIOD_ON_ERRORS: Duration = Duration::from_secs(600);
 
 #[derive(Debug)]
 // We switch from one to the other for manual testing, but it's actually fine to keep both.
@@ -23,8 +22,7 @@ pub struct KittyUpdater {
     update_mode: KittyUpdateMode,
     client: Client,
     kitty_url: String,
-    kitty_period_config: Duration,
-    kitty_period: Duration,
+    kitty_period: ExponentialBackoff,
 }
 
 #[tonic::async_trait]
@@ -32,7 +30,7 @@ impl DataUpdater for KittyUpdater {
     fn get_next_update_time(&self) -> Instant {
         match self.update_mode {
             KittyUpdateMode::Dummy => Instant::now() + Duration::from_secs(19),
-            KittyUpdateMode::Real => Instant::now() + self.kitty_period,
+            KittyUpdateMode::Real => Instant::now() + self.kitty_period.get_current_duration(),
         }
     }
 
@@ -62,13 +60,13 @@ impl DataUpdater for KittyUpdater {
                         // Make sure the server knows there are no errors
                         error_bit.store(false, std::sync::atomic::Ordering::Relaxed);
                         // And potentially resume normal update cadence
-                        self.kitty_period = self.kitty_period_config;
+                        self.kitty_period.set_success();
                         returned_debts
                     }
                     Err(e) => {
                         error!("Error getting Kitty debts: {}", e);
                         error_bit.store(true, std::sync::atomic::Ordering::Relaxed);
-                        self.kitty_period = REFRESH_PERIOD_ON_ERRORS;
+                        self.kitty_period.set_error();
                         vec![]
                     }
                 }
@@ -98,12 +96,15 @@ impl KittyUpdater {
                 .seconds
                 .try_into()?,
         );
-        let kitty_period = kitty_period_config;
+        let kitty_period = ExponentialBackoff::new(
+            kitty_period_config,
+            Duration::from_secs(60), // 1 min
+            Duration::from_secs(1200), // 20 min
+        );
         Ok(KittyUpdater {
             update_mode,
             client: Client::new(),
             kitty_url,
-            kitty_period_config,
             kitty_period,
         })
     }

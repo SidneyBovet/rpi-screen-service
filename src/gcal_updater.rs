@@ -1,3 +1,4 @@
+use crate::exponential_backoff::ExponentialBackoff;
 use crate::screen_service::{CalendarEvent, ScreenContentReply};
 use crate::{config_extractor::api_config, data_updater::DataUpdater};
 use chrono::{Datelike, NaiveDateTime, Timelike};
@@ -8,8 +9,6 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use tokio::time::{Duration, Instant};
-
-static REFRESH_PERIOD_ON_ERRORS: Duration = Duration::from_secs(600);
 
 #[derive(Debug)]
 // We switch from one to the other for manual testing, but it's actually fine to keep both.
@@ -24,8 +23,7 @@ pub struct GcalUpdater {
     update_mode: GcalUpdateMode,
     client: Client,
     ics_url: String,
-    gcal_period_config: Duration,
-    gcal_period: Duration,
+    gcal_period: ExponentialBackoff,
 }
 
 #[tonic::async_trait]
@@ -33,7 +31,7 @@ impl DataUpdater for GcalUpdater {
     fn get_next_update_time(&self) -> Instant {
         match self.update_mode {
             GcalUpdateMode::Dummy => Instant::now() + Duration::from_secs(29),
-            GcalUpdateMode::Real => Instant::now() + self.gcal_period,
+            GcalUpdateMode::Real => Instant::now() + self.gcal_period.get_current_duration(),
         }
     }
 
@@ -59,13 +57,13 @@ impl DataUpdater for GcalUpdater {
                         // Make sure the server knows there are no errors
                         error_bit.store(false, std::sync::atomic::Ordering::Relaxed);
                         // And potentially resume normal update cadence
-                        self.gcal_period = self.gcal_period_config;
+                        self.gcal_period.set_success();
                         returned_event
                     }
                     Err(e) => {
                         error!("Error getting gCal event: {}", e);
                         error_bit.store(true, std::sync::atomic::Ordering::Relaxed);
-                        self.gcal_period = REFRESH_PERIOD_ON_ERRORS;
+                        self.gcal_period.set_error();
                         None
                     }
                 }
@@ -93,12 +91,15 @@ impl GcalUpdater {
                 .seconds
                 .try_into()?,
         );
-        let gcal_period = gcal_period_config;
+        let gcal_period = ExponentialBackoff::new(
+            gcal_period_config,
+            Duration::from_secs(60), // 1 min
+            Duration::from_secs(1200), // 20 min
+        );
         Ok(GcalUpdater {
             update_mode,
             client: Client::new(),
             ics_url,
-            gcal_period_config,
             gcal_period,
         })
     }

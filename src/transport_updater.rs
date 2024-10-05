@@ -1,5 +1,6 @@
 use crate::config_extractor::api_config::TransportConfig;
 use crate::dummy_client::screen_service::departure::DestinationEnum;
+use crate::exponential_backoff::ExponentialBackoff;
 use crate::screen_service::{Departure, ScreenContentReply};
 use crate::{config_extractor::api_config, data_updater::DataUpdater};
 use chrono::{Datelike, NaiveDateTime, Timelike};
@@ -27,6 +28,7 @@ pub struct TransportUpdater {
     client: Client,
     config: TransportConfig,
     transport_next_update: Instant,
+    backoff_handler: ExponentialBackoff,
 }
 
 #[tonic::async_trait]
@@ -35,9 +37,15 @@ impl DataUpdater for TransportUpdater {
         match self.update_mode {
             TransportUpdateMode::Dummy => Instant::now() + Duration::from_secs(21),
             TransportUpdateMode::Real => {
-                if self.transport_next_update < Instant::now() {
-                    warn!("Next planned update is in the past, returning the default next update (in 10 minutes)");
-                    get_default_next_update_time()
+                if self.backoff_handler.get_is_error() {
+                    warn!(
+                        "Transport updater in error mode, performing exponential backoff. Current: {:?}",
+                        self.backoff_handler.get_current_duration()
+                    );
+                    Instant::now() + self.backoff_handler.get_current_duration()
+                } else if self.transport_next_update < Instant::now() {
+                    error!("Next planned update is in the past (we should be in exp. backoff mode!). Returning the default next update (in 10 minutes)");
+                    Instant::now() + Duration::from_secs(600)
                 } else {
                     self.transport_next_update
                 }
@@ -68,6 +76,7 @@ impl DataUpdater for TransportUpdater {
             TransportUpdateMode::Real => {
                 destinations = match self.get_departures().await {
                     Ok(mut departures) => {
+                        // Compute next update time based on result, or enter error mode
                         self.set_next_update_time(&mut departures);
                         // Make sure the server knows there are no errors
                         error_bit.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -75,8 +84,10 @@ impl DataUpdater for TransportUpdater {
                     }
                     Err(e) => {
                         error!("Error getting next departures: {}", e);
-                        self.transport_next_update = get_default_next_update_time();
                         error_bit.store(true, std::sync::atomic::Ordering::Relaxed);
+                        self.backoff_handler.set_error();
+                        // Not needed, but for regression safety (we should see the error bit in backoff_handler and use its duration instead)
+                        self.transport_next_update = Instant::now() + Duration::from_secs(600);
                         vec![]
                     }
                 }
@@ -97,12 +108,18 @@ impl TransportUpdater {
         config: &api_config::ApiConfig,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let transport_config = config.transport.as_ref().ok_or("No transport config")?;
+        let backoff_handler = ExponentialBackoff::new(
+            Duration::ZERO,            // Not needed, we'll just read from the next departure
+            Duration::from_secs(60),   // 1 min
+            Duration::from_secs(1200), // 20 min
+        );
         // This will get set after each update to match the next departure
         Ok(TransportUpdater {
             update_mode,
             client: Client::new(),
             config: transport_config.to_owned(),
-            transport_next_update: get_default_next_update_time(),
+            transport_next_update: Instant::now() + Duration::from_secs(600), // Technically not needed
+            backoff_handler,
         })
     }
 
@@ -132,19 +149,31 @@ impl TransportUpdater {
         });
         match self.get_duration_to_next_departure(departures.first(), Duration::from_secs(1)) {
             Ok(next_update) => {
-                debug!(
-                    "Next departure is {:?}, will update again at {:?}",
-                    departures.first(),
-                    next_update
-                );
-                self.transport_next_update = next_update;
+                if next_update < Instant::now() {
+                    warn!(
+                        "Next departure is in the past, entering error mode & exponential backoff"
+                    );
+                    self.backoff_handler.set_error();
+                    // Not needed, but for regression safety (we should see the error bit in backoff_handler and use its duration instead)
+                    self.transport_next_update = Instant::now() + Duration::from_secs(600);
+                } else {
+                    debug!(
+                        "Next departure is {:?}, will update again at {:?}",
+                        departures.first(),
+                        next_update
+                    );
+                    self.backoff_handler.set_success();
+                    self.transport_next_update = next_update;
+                }
             }
             Err(e) => {
                 warn!(
-                    "Error getting next update time: {} -- setting default 10 minutes from now",
+                    "Error getting next update time: {} -- entering error mode",
                     e
                 );
-                self.transport_next_update = get_default_next_update_time();
+                self.backoff_handler.set_error();
+                // Not needed, but for regression safety (we should see the error bit in backoff_handler and use its duration instead)
+                self.transport_next_update = Instant::now() + Duration::from_secs(600);
             }
         }
     }
@@ -171,11 +200,6 @@ impl TransportUpdater {
             + Duration::from_secs(u64::try_from(departure_utc_sec - now_utc_sec)?)
             + offset)
     }
-}
-
-// If we don't have any upcoming departure, this default asks for us to re-run in 10 minutes
-fn get_default_next_update_time() -> Instant {
-    Instant::now() + Duration::from_secs(600)
 }
 
 fn create_ojp_request(config: &TransportConfig, now: &chrono::DateTime<chrono::Utc>) -> String {
