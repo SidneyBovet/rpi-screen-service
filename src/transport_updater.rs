@@ -110,7 +110,7 @@ impl TransportUpdater {
         let transport_config = config.transport.as_ref().ok_or("No transport config")?;
         let backoff_handler = ExponentialBackoff::new(
             Duration::ZERO,            // Not needed, we'll just read from the next departure
-            Duration::from_secs(60),   // 1 min
+            Duration::from_secs(30),
             Duration::from_secs(1200), // 20 min
         );
         // This will get set after each update to match the next departure
