@@ -239,7 +239,7 @@ fn create_ojp_request(config: &TransportConfig, now: &chrono::DateTime<chrono::U
 #[derive(Debug, Default)]
 struct DepartureBuilder {
     departure_time: Option<Timestamp>,
-    dest_id: Option<u32>,
+    dest_id: Option<String>,
 }
 
 fn extract_departures(
@@ -307,12 +307,7 @@ fn extract_departures(
                                     break;
                                 };
                                 debug!("  Towards: {:?}", text);
-                                let Ok(dest_id) = text.parse::<u32>().inspect_err(|e| {
-                                    error!("Couldn't parse stop point ID into a number: {}", e)
-                                }) else {
-                                    break;
-                                };
-                                departure.dest_id = Some(dest_id);
+                                departure.dest_id = Some(text.into_owned());
                             }
                             other => {
                                 error!(
@@ -629,14 +624,14 @@ mod tests {
         let config = TransportConfig {
             url: "".into(),
             api_key: "".into(),
-            stop_id: 123,
+            stop_id: "123".into(),
             destination_points: vec![
                 DestinationPoints {
-                    stops: vec![234, 345],
+                    stops: vec!["234".into(), "345".into()],
                     destination_name: DestinationEnum::Renens.as_str_name().into(),
                 },
                 DestinationPoints {
-                    stops: vec![456],
+                    stops: vec!["456".into()],
                     destination_name: DestinationEnum::Flon.as_str_name().into(),
                 },
             ],
@@ -712,7 +707,7 @@ mod tests {
         let config = TransportConfig {
             url: "".into(),
             api_key: "".into(),
-            stop_id: 123,
+            stop_id: "123".into(),
             destination_points: vec![],
         };
         assert_eq!(create_ojp_request(&config, &fake_now), expected_xml);

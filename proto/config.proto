@@ -61,13 +61,14 @@ message KittyConfig {
 }
 
 message TransportConfig {
+    // API explorer: https://opentdatach.github.io/api-explorer2/#/default/OJP2.0
     message DestinationPoints {
-        repeated uint32 stops = 1;
+        repeated string stops = 1;
         string destination_name = 2;
     }
     string url = 1;
     string api_key = 2;
-    uint32 stop_id = 3;
+    string stop_id = 3;
     repeated DestinationPoints destination_points = 4;
 }
 
